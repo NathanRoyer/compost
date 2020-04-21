@@ -115,7 +115,7 @@ extern void * pta_detach_dependent(void * field);
 
 extern void * pta_attach_dependent(void * destination, void * dependent);
 
-extern void * pta_create_type(pta_obj any_pta_obj, size_t nested_objects, size_t object_size, uint8_t flags);
+extern void * pta_create_type(void * any_pta_address, size_t nested_objects, size_t object_size, uint8_t flags);
 
 extern size_t pta_set_dynamic_field(pta_type_t * type, pta_type_t * field_type, pta_array field_name, size_t offset, uint8_t flags);
 
