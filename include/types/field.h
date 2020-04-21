@@ -47,6 +47,8 @@ typedef PTA_STRUCT field_info_b {
 	uint8_t flags;
 } field_info_b_t;
 
+void * pta_get_obj(void * obj);
+
 type_t * pta_type_of(void * obj);
 
 void * pta_get_c_object(void * obj);

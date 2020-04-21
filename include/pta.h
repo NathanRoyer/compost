@@ -28,7 +28,7 @@
 #define PTA_STRUCT struct __attribute__ ((__packed__))
 
 typedef PTA_STRUCT {
-	int length;
+	size_t length;
 	char * data;
 } pta_array;
 
@@ -144,11 +144,19 @@ extern void pta_remove_superfluous_pages(pta_type_t * type);
 extern void pta_garbage_collect(pta_type_t * root_type);
 
 // dict.h
-extern void * pta_dict_get(pta_obj dictionnary, pta_array key);
 
-extern bool pta_dict_has(pta_obj dictionnary, pta_array key);
+typedef PTA_STRUCT pta_dict {
+	pta_obj first_block;
+	void * empty_key_v;
+} pta_dict_t;
 
-extern void * pta_dict_set(pta_obj dictionnary, pta_array key, void * value);
+extern void * pta_dict_get_al(pta_obj dictionnary, pta_obj key);
+
+extern void * pta_dict_set_al(pta_obj dictionnary, pta_obj key, void * value);
+
+extern void * pta_dict_get_pa(pta_obj dictionnary, pta_array key);
+
+extern void * pta_dict_set_pa(pta_obj dictionnary, pta_array key, void * value);
 
 extern size_t pta_dict_count(pta_obj d_refc);
 

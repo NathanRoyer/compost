@@ -42,29 +42,30 @@ void new_dict_block(void * field, root_page_t * rp, int8_t key_part){
  * held by the dictionnary at this specific key with this function.
  * Return value: the value corresponding to the key
  */
-void * pta_dict_get(void * d_refc, array key){
+void * dict_get_internal(void * d_refc, void * al_key, array pa_key){
 	dict_t * d = pta_get_c_object(d_refc);
-	if (key.length == 0) return d->empty_key_v;
+	size_t key_length = (al_key == NULL) ? pa_key.length : pta_array_length(al_key);
+	if (key_length == 0) return d->empty_key_v;
 	dict_block_t * dblk = pta_get_c_object(d->first_block);
 
 	for (int i = 0; dblk != NULL; ){
-		if (dblk->key_part == char_at(key, i)){
-			if (++i == key.length) break;
+		char c = (al_key == NULL) ? pa_key.data[i] : *(char *)pta_array_get(al_key, i);
+		if (dblk->key_part == c){
+			if (++i == key_length) break;
 			else dblk = pta_get_c_object(dblk->equal);
-		} else if (dblk->key_part > char_at(key, i)) dblk = NULL;
+		} else if (dblk->key_part > c) dblk = NULL;
 		else dblk = pta_get_c_object(dblk->unequal);
 	}
 
 	return (dblk != NULL && dblk->value != NULL) ? dblk->value : NULL;
 }
 
-/* dict_has(dictionnary d, string key)
- *
- * this function tells you if a dictionnary has a value, given a specific key.
- * Return value: boolean
- */
-bool pta_dict_has(void * d_refc, array key){
-	return pta_dict_get(d_refc, key) == NULL;
+void * pta_dict_get_al(void * d_refc, void * key){
+	return dict_get_internal(d_refc, key, (array){ 0, NULL });
+}
+
+void * pta_dict_get_pa(void * d_refc, array key){
+	return dict_get_internal(d_refc, NULL, key);
 }
 
 /* dict_set(context c, dictionnary d, string key, pointer value)
@@ -72,40 +73,44 @@ bool pta_dict_has(void * d_refc, array key){
  * This function sets a key-value pair in a dictionnary.
  * Return value: the value parameter
  */
-void * pta_dict_set(void * d_refc, array key, void * value){
+void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * value){
 	pta_increment_refc(d_refc);
 	root_page_t * rp = get_root_page(d_refc);
 
 	dict_t * d = pta_get_c_object(d_refc);
-	char * key_data = key.data;
+	size_t key_length = (key_al == NULL) ? key_pa.length : pta_array_length(key_al);
+	char c;
 	void ** value_holder = NULL;
-	if (key.length == 0) value_holder = &d->empty_key_v;
+	if (key_length == 0) value_holder = &d->empty_key_v;
 	else {
-		if (d->first_block == NULL) new_dict_block(&d->first_block, rp, key_data[0]);
+		c = (key_al == NULL) ? key_pa.data[0] : *(char *)pta_array_get(key_al, 0);
+		if (d->first_block == NULL) new_dict_block(&d->first_block, rp, c);
 		void ** dblkp = &d->first_block;
 		void * dblk_refc = *dblkp;
 		dict_block_t * dblk = pta_get_c_object(dblk_refc);
 
-		for (int i = 0; i < key.length && value_holder == NULL; ){
-			if (dblk->key_part == key_data[i]){
-				if (++i == key.length) value_holder = &dblk->value;
+		for (int i = 0; i < key_length && value_holder == NULL; ){
+			c = (key_al == NULL) ? key_pa.data[i] : *(char *)pta_array_get(key_al, i);
+			if (dblk->key_part == c){
+				if (++i == key_length) value_holder = &dblk->value;
 				else {
 					// i was just incremented
-					if (dblk->equal == NULL) new_dict_block(&dblk->equal, rp, key_data[i]);
+					c = (key_al == NULL) ? key_pa.data[i] : *(char *)pta_array_get(key_al, i);
+					if (dblk->equal == NULL) new_dict_block(&dblk->equal, rp, c);
 					dblkp = &dblk->equal;
 					dblk_refc = *dblkp;
 					dblk = pta_get_c_object(dblk_refc);
 				}
-			} else if (dblk->key_part > key_data[i]){
+			} else if (dblk->key_part > c){
 				void * blk = pta_detach_dependent(dblkp);
 				pta_protect_detached(blk);
-				new_dict_block(dblkp, rp, key_data[i]);
+				new_dict_block(dblkp, rp, c);
 				dblk_refc = *dblkp;
 				dblk = pta_get_c_object(dblk_refc);
 				pta_attach_dependent(&dblk->unequal, blk);
 				;
 			} else {
-				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, rp, key_data[i]);
+				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, rp, c);
 				dblkp = &dblk->unequal;
 				dblk_refc = *dblkp;
 				dblk = pta_get_c_object(dblk_refc);
@@ -116,6 +121,14 @@ void * pta_dict_set(void * d_refc, array key, void * value){
 	pta_decrement_refc(d_refc);
 
 	return *value_holder = value;
+}
+
+void * pta_dict_set_al(void * d_refc, void * key_al, void * value){
+	return dict_set_internal(d_refc, key_al, (array){ 0, NULL }, value);
+}
+
+void * pta_dict_set_pa(void * d_refc, array key_pa, void * value){
+	return dict_set_internal(d_refc, NULL, key_pa, value);
 }
 
 /* new_dict_block (private function)
@@ -216,7 +229,7 @@ bool fill_index(dict_block_t * dblk, array * index, int i){
  */
 void pta_dict_get_next_index(void * d_refc, array * index){
 	dict_t * d = pta_get_c_object(d_refc);
-	if (index->length == -1){
+	if (index->data == NULL){
 		index->length = get_longest_index(d);
 		if (index->length > 0){
 			index->data = malloc(index->length);

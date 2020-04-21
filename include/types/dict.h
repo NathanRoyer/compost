@@ -39,11 +39,13 @@ typedef PTA_STRUCT dict {
 	void * empty_key_v;
 } dict_t;
 
-void * pta_dict_get(void * d_refc, array key);
+void * pta_dict_get_al(void * d_refc, void * key);
 
-bool pta_dict_has(void * d_refc, array key);
+void * pta_dict_get_pa(void * d_refc, array key);
 
-void * pta_dict_set(void * d_refc, array key, void * value);
+void * pta_dict_set_al(void * d_refc, void * key, void * value);
+
+void * pta_dict_set_pa(void * d_refc, array key, void * value);
 
 size_t pta_dict_count(void * d_refc);
 

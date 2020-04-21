@@ -19,7 +19,7 @@
 
 #include "types/refc.h"
 
-void * pta_get_obj(void * address){
+void ** find_raw_refc(void * address){
 	page_header_t * page = PG_START(address);
 	if (PG_FLAG(page, PAGE_ARRAY)){
 		array_part_t * array_part = PG_REFC(page), * next_ap;

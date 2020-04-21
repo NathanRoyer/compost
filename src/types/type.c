@@ -404,7 +404,7 @@ context_t pta_setup(){
 		fibp->rt_dynf [0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT | FIBF_POINTER };
 		fibp->rt_statf[0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT | FIBF_POINTER };
 		fibp->rt_pgl  [0].fib = (field_info_b_t){ &rp->pglt, FIBF_DEPENDENT | FIBF_POINTER };
-		fibp->rt_cdat [0].fib = (field_info_b_t){ NULL, FIBF_BASIC }; // set by the client
+		fibp->rt_cdat [0].fib = (field_info_b_t){ UNDEFINED, FIBF_BASIC }; // set by the client
 		fibp->rt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
 
 		for (int i = 1; i < 8; i++) fibp->rt_dfia [i].fib = goback;
@@ -435,7 +435,7 @@ context_t pta_setup(){
 		// FIAT TYPE
 		fibp->fiat_fib_ap = (array_part_t){ &rp->fiat_refc, 16, 0, NULL };
 		
-		fibp->fiat_ft[0].fib = (field_info_b_t){ &rp->rt, FIBF_BASIC | FIBF_POINTER }; // field_type
+		fibp->fiat_ft[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
 		fibp->fiat_do[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // data offset
 		for (int i = 1; i < 8; i++) fibp->fiat_ft[i].fib = goback;
 		for (int i = 1; i < 8; i++) fibp->fiat_do[i].fib = goback;
@@ -443,7 +443,7 @@ context_t pta_setup(){
 		// FIBT TYPE
 		fibp->fibt_fib_ap = (array_part_t){ &rp->fibt_refc, 9, 0, NULL };
 		
-		fibp->fibt_ft   [0].fib = (field_info_b_t){ &rp->rt, FIBF_BASIC | FIBF_POINTER }; // field_type
+		fibp->fibt_ft   [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
 		fibp->fibt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC }; // flags
 		for (int i = 1; i < 8; i++) fibp->fibt_ft[i].fib = goback;
 		// fibt_flags is only 1 byte
@@ -566,56 +566,56 @@ context_t pta_setup(){
 		// rt
 		void * df = rp->rt.dynamic_fields;
 		size_t i = rp->rt.offsets;
-		pta_dict_set(df, const_array("dfia"),            (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("dfib"),            (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("object_size"),     (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("offsets"),         (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("paged_size"),      (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("page_limit"),      (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("dynamic_fields"),  (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("static_fields"),   (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("page_list"),       (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("client_data"),     (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("flags"),           (void *)( i )); // i += 1;
+		pta_dict_set_pa(df, const_array("dfia"),            (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("dfib"),            (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("object_size"),     (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("offsets"),         (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("paged_size"),      (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("page_limit"),      (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("dynamic_fields"),  (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("static_fields"),   (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("page_list"),       (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("client_data"),     (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("flags"),           (void *)( i )); // i += 1;
 
 		// fiat
 		df = rp->fiat.dynamic_fields;
 		i = rp->fiat.offsets;
-		pta_dict_set(df, const_array("field_type"),      (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("data_offset"),     (void *)( i )); // i += 8;
+		pta_dict_set_pa(df, const_array("field_type"),      (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("data_offset"),     (void *)( i )); // i += 8;
 
 		// fibt
 		df = rp->fibt.dynamic_fields;
 		i = rp->fibt.offsets;
-		pta_dict_set(df, const_array("field_type"),      (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("flags"),           (void *)( i )); // i += 1;
+		pta_dict_set_pa(df, const_array("field_type"),      (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("flags"),           (void *)( i )); // i += 1;
 
 		// pglt
 		df = rp->pglt.dynamic_fields;
 		i = rp->pglt.offsets;
-		pta_dict_set(df, const_array("next"),            (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("first_instance"),  (void *)( i )); // i += 8;
+		pta_dict_set_pa(df, const_array("next"),            (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("first_instance"),  (void *)( i )); // i += 8;
 
 		// dht
 		df = rp->dht.dynamic_fields;
 		i = rp->dht.offsets;
-		pta_dict_set(df, const_array("first_block"),     (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("empty_key_v"),     (void *)( i )); // i += 8;
+		pta_dict_set_pa(df, const_array("first_block"),     (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("empty_key_v"),     (void *)( i )); // i += 8;
 
 		// dbt
 		df = rp->dbt.dynamic_fields;
 		i = rp->dbt.offsets;
-		pta_dict_set(df, const_array("equal"),           (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("unequal"),         (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("value"),           (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("key_part"),        (void *)( i )); // i += 8;
+		pta_dict_set_pa(df, const_array("equal"),           (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("unequal"),         (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("value"),           (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("key_part"),        (void *)( i )); // i += 8;
 
 		// array
 		df = rp->art.dynamic_fields;
 		i = rp->art.offsets;
-		pta_dict_set(df, const_array("size"),           (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("ffsp"),         (void *)( i )); i += 8;
-		pta_dict_set(df, const_array("next"),        (void *)( i )); // i += 8;
+		pta_dict_set_pa(df, const_array("size"),           (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("ffsp"),         (void *)( i )); i += 8;
+		pta_dict_set_pa(df, const_array("next"),        (void *)( i )); // i += 8;
 	}
 
 	return ctx;

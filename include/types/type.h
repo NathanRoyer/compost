@@ -27,7 +27,7 @@
 #define PTA_STRUCT struct __attribute__ ((__packed__))
 
 typedef PTA_STRUCT {
-	int length;
+	size_t length;
 	char * data;
 } array;
 

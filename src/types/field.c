@@ -20,6 +20,7 @@
 #include "types/field.h"
 
 typedef struct obj_info {
+	size_t offsets_zone;
 	size_t offset;
 	type_t * page_type;
 	uint8_t page_flags;
@@ -37,17 +38,27 @@ obj_info_t get_info(void * obj){
 		}
 
 		if (obj < (void *)array_part + sizeof(array_part_t)){
-			return (obj_info_t){
+			 obj_info_t info = {
+				0,
 				(size_t)obj - (size_t)array_part,
 				&(get_root_page(page->type)->art), 
 				page->flags
 			};
+			info.offsets_zone = GET_OFFSET_ZONE(info.page_type);
+			return info;
 		} else {
 			offset = obj - ((void *)array_part + sizeof(array_part_t));
 			offset %= page->type->object_size + page->type->offsets;
 		}
 	} else offset = (PG_REL(obj - sizeof(page_header_t))) % page->type->paged_size;
-	return (obj_info_t){ offset, page->type, page->flags };
+	return (obj_info_t){
+		(page->flags & PAGE_ARRAY) ? page->type->offsets : GET_OFFSET_ZONE(page->type),
+		offset, page->type, page->flags
+	};
+}
+
+void * pta_get_obj(void * address){
+	return address - get_info(address).offset;
 }
 
 /* type_of (pointer obj)
@@ -62,16 +73,12 @@ type_t * pta_type_of(void * obj){
 	type_t * field_type;
 	obj_info_t info = get_info(obj);
 
-	size_t offsets_zone;
-	if ((info.page_flags & PAGE_ARRAY) && !(info.page_type->flags & TYPE_ARRAY)) offsets_zone = info.page_type->offsets;
-	else offsets_zone = GET_OFFSET_ZONE(info.page_type);
-
 	if (info.offset == 0) field_type = info.page_type;
-	else if (info.offset < offsets_zone){
+	else if (info.offset < info.offsets_zone){
 		do field_type = GET_FIA(info.page_type, info.offset--)->field_type;
 		while (field_type == GO_BACK);
 	} else {
-		info.offset -= offsets_zone;
+		info.offset -= info.offsets_zone;
 		field_info_b_t * fib;
 		do {
 			fib = GET_FIB(info.page_type, info.offset--);
@@ -93,11 +100,7 @@ type_t * pta_type_of(void * obj){
 void * pta_get_c_object(void * obj){
 	if (obj != NULL){
 		obj_info_t info = get_info(obj);
-		size_t offsets_zone;
-		if ((info.page_flags & PAGE_ARRAY) && !(info.page_type->flags & TYPE_ARRAY)) offsets_zone = info.page_type->offsets;	
-		else offsets_zone = GET_OFFSET_ZONE(info.page_type);
-		
-		if (info.offset < offsets_zone) obj += offsets_zone - info.offset;
+		if (info.offset < info.offsets_zone) obj += info.offsets_zone - info.offset;
 	}
 	return obj;
 }
@@ -125,8 +128,10 @@ void * pta_prepare(void * obj, type_t * type){
 		array str = { -1, NULL };
 		do {
 			pta_dict_get_next_index(type->dynamic_fields, &str);
-			if (str.length > 0){
+			if (str.data != NULL){
+				// pta_print_cstr(str);
 				void * field = pta_get_field(obj, str);
+				// printf(" (%p) is being prepared.\n", field);
 				if (field){
 					type_t * field_type = pta_type_of(field);
 					if (field_type != NULL){
@@ -146,7 +151,7 @@ void * pta_prepare(void * obj, type_t * type){
 					}
 				}
 			}
-		} while (str.length > 0);
+		} while (str.data != NULL);
 	}
 
 	if (obj_c == obj) pta_decrement_refc(obj);
@@ -220,10 +225,11 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
 	pta_increment_refc(new_type_refc);
 	type_t * new_type = pta_get_c_object(new_type_refc);
 
+	pta_prepare(new_type_refc, &rp->rt);
+
 	new_type->object_size = object_size;
 	new_type->offsets = offsets;
 	new_type->page_list = NULL;
-	new_type->client_data = NULL;
 	new_type->flags = flags;
 
 	void * dyn_f = pta_spot_dependent(&new_type->dynamic_fields, &rp->dht);
@@ -288,6 +294,8 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 		field_size = field_type->object_size;
 
 		offset_from_refc = find_and_fill_fia(host_type, field_type, fib_offset);
+		// pta_print_cstr(field_name);
+		// printf(" (%li) - nested at %li\n", fib_offset, offset_from_refc);
 		if (field_type->offsets > 1){
 			for (size_t i = 1; i < field_type->offsets; i++){
 				field_info_a_t * fia = GET_FIA(field_type, i);
@@ -307,7 +315,7 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 			else *fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
 		}
 	}
-	pta_dict_set(host_type->dynamic_fields, field_name, (void *)offset_from_refc);
+	pta_dict_set_pa(host_type->dynamic_fields, field_name, (void *)offset_from_refc);
 	return field_size;
 }
 
@@ -321,8 +329,9 @@ uint8_t pta_get_flags(void * obj){
 	obj_info_t info = get_info(obj);
 	uint8_t result;
 
-	if (info.offset > info.page_type->offsets){
-		field_info_b_t * fib = GET_FIB(info.page_type, info.offset - GET_OFFSET_ZONE(info.page_type));
+	if (info.offset >= info.page_type->offsets){
+		size_t offset = info.offset - info.offsets_zone;
+		field_info_b_t * fib = GET_FIB(info.page_type, offset);
 		result = fib->flags;
 	} else result = FIBF_NESTED | FIBF_AUTO_INST;
 
@@ -342,16 +351,16 @@ void * pta_get_field(void * obj, array field_name){
 	}
 	obj_info_t info = get_info(obj);
 	type_t * field_type = pta_type_of(obj);
-	size_t new_offset = (size_t)pta_dict_get(field_type->dynamic_fields, field_name);
+	size_t new_offset = (size_t)pta_dict_get_pa(field_type->dynamic_fields, field_name);
 
 	if (new_offset >= field_type->offsets){
 		new_offset -= field_type->offsets;
-		new_offset += GET_OFFSET_ZONE(info.page_type);
+		new_offset += info.offsets_zone;
 		if (info.offset > 0 && info.offset < info.page_type->offsets){
 			new_offset += GET_FIA(info.page_type, info.offset)->data_offset;
 		}
 	} else new_offset += info.offset;
 
-	return ((void *)find_raw_refc(obj) + new_offset);
+	return ((void *)pta_get_obj(obj) + new_offset);
 }
 

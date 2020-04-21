@@ -34,7 +34,7 @@ void * get_var(pta_array arg){
 	void * var = NULL;
 	if (arg.data == NULL) printf("This command requires an argument.\n");
 	else {
-		var = pta_dict_get(variables, arg);
+		var = pta_dict_get_pa(variables, arg);
 		if (var == NULL) printf("Variable not found: \"%s\".\n", arg.data);
 	}
 	return var;
@@ -57,10 +57,10 @@ int main(int argc, char *argv[]){
 	pta_context_t ctx = pta_setup();
 	variables = pta_prepare(pta_spot(ctx.dht), ctx.dht);
 	pta_increment_refc(variables);
-	pta_dict_set(variables, pta_const_array("type_t"), pta_get_obj(ctx.rt));
-	pta_dict_set(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
-	pta_dict_set(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
-	pta_dict_set(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
+	pta_dict_set_pa(variables, pta_const_array("type_t"), pta_get_obj(ctx.rt));
+	pta_dict_set_pa(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
+	pta_dict_set_pa(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
+	pta_dict_set_pa(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
 
 	bool running = true;
 	while (running){
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]){
 						pta_type_t * var_t = pta_get_c_object(type);
 						void * new_var = pta_prepare(pta_spot(var_t), var_t);
 						printf("spotted\n");
-						pta_dict_set(variables, instance_name, new_var);
+						pta_dict_set_pa(variables, instance_name, new_var);
 						pta_increment_refc(new_var);
 					} else {
 						printf("Argument ");
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]){
 				pta_print_cstr(new_type_name);
 				printf(", %p\n", new_type_refc);
 				pta_increment_refc(new_type_refc);
-				pta_dict_set(variables, new_type_name, new_type_refc);
+				pta_dict_set_pa(variables, new_type_name, new_type_refc);
 
 				pta_type_t * new_type = pta_get_c_object(new_type_refc);
 				size_t field_offset = 0;

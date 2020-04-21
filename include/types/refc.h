@@ -29,11 +29,9 @@ typedef void * refc_t;
 // a direct self-reference is used as fake dependence
 #define FAKE_DEPENDENT(any_paged_obj) (any_paged_obj)
 
-void * pta_get_obj(void * obj);
+void ** find_raw_refc(void * address);
 
 void * pta_get_final_obj(void * address);
-
-#define find_raw_refc(address) ((void **)pta_get_obj(address))
 
 #define find_refc(address) ((size_t *)pta_get_final_obj(address))
 

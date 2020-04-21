@@ -31,16 +31,27 @@ void print_color(int n, bool inverted){
 }
 
 void print_fields(void * obj){
-	type_t * type = pta_type_of(find_raw_refc(obj));
+	void * refc = pta_get_obj(obj);
+	type_t * type = pta_type_of(refc);
+	uint8_t flags;
 	printf("fia:\n");
-	for (size_t i = 1; i < type->offsets; i++){
-		field_info_a_t * fia = GET_FIA(type, i);
-		printf("%li | %p | %li\n", i, fia->field_type, fia->data_offset);
+	for (size_t i = 0; i < type->offsets; i++){
+		if (refc + i == obj) print_color(0, false);
+		flags = pta_get_flags(refc + i);
+		if (i == 0){
+			printf("%li |      self      | x | x\033[m\n", i);
+		} else {
+			field_info_a_t * fia = GET_FIA(type, i);
+			printf("%li | %p | %li | %hhi\033[m\n", i, fia->field_type, fia->data_offset, flags);
+		}
 	}
 	printf("fib:\n");
+	refc = pta_get_c_object(refc);
 	for (size_t i = 0; i < type->object_size; i++){
+		flags = pta_get_flags(refc + i);
 		field_info_b_t * fib = GET_FIB(type, i);
-		printf("%li | %p | %li\n", i, fib->field_type, fib->flags);
+		if (refc + i == obj) print_color(0, false);
+		printf("%li | %p | %li | %hhi\033[m\n", i, fib->field_type, fib->flags, flags);
 	}
 }
 
@@ -91,9 +102,11 @@ size_t print_value(void * object, size_t size){
 }
 
 void show_fields(void * obj, size_t recursion){
+	// sleep(1);
 	if (obj == NULL) return (void) printf(" (NULL)\n");
 	else if (pta_is_pointer(obj)) obj = *(void **)obj;
 	type_t * type = pta_type_of(obj);
+	if (type == UNDEFINED) return (void) printf(" (Undefined field)\n");
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
 		printf(" = ");
@@ -109,7 +122,7 @@ void show_fields(void * obj, size_t recursion){
 		array str = { -1, NULL };
 		do {
 			pta_dict_get_next_index(type->dynamic_fields, &str);
-			if (str.length > 0){
+			if (str.data != NULL){
 				printf("%0*s‣ ", recursion * 3, " ");
 				pta_print_cstr(str);
 				void * field = pta_get_field(obj, str);
@@ -118,7 +131,7 @@ void show_fields(void * obj, size_t recursion){
 					else show_fields(field, recursion + 1);
 				} else printf(" [unr. field]\n");
 			}
-		} while (str.length >= 0);
+		} while (str.data != NULL);
 	}
 	if (type->flags & TYPE_ARRAY){
 		array_part_t * array_part = obj;
