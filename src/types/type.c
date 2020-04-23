@@ -404,7 +404,7 @@ context_t pta_setup(){
 		fibp->rt_dynf [0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT | FIBF_POINTER };
 		fibp->rt_statf[0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT | FIBF_POINTER };
 		fibp->rt_pgl  [0].fib = (field_info_b_t){ &rp->pglt, FIBF_DEPENDENT | FIBF_POINTER };
-		fibp->rt_cdat [0].fib = (field_info_b_t){ UNDEFINED, FIBF_BASIC }; // set by the client
+		fibp->rt_cdat [0].fib = (field_info_b_t){ NULL, FIBF_BASIC }; // set by the client
 		fibp->rt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
 
 		for (int i = 1; i < 8; i++) fibp->rt_dfia [i].fib = goback;

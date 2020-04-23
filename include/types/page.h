@@ -49,14 +49,12 @@ typedef PTA_STRUCT array_part {
 	array_part_t * next_part;
 } array_part_t;
 
-#define NEVER_SPOT_I (DONT USE)
-#define NEVER_SPOT_P (DONT USE)
 #define PG_START(addr) (void *)((size_t)addr & sys_page_mask)
 #define PG_TYPE(addr)  (((page_header_t *)PG_START(addr))->type)
 #define PG_REL(addr)   (((size_t)addr) & sys_page_rel_mask)
 #define PG_NEXT(page)  ((void *)page + pta_sys_page_size)
 #define PG_REFC(page)  ((void *)page + sizeof(page_header_t))
-#define PG_FLAGS(page)   ((page_header_t *)page)->flags
+#define PG_FLAGS(page) ((page_header_t *)page)->flags
 #define PG_FLAG(page, flag)   (PG_FLAGS(page) & flag)
 #define ARRAY_CONTENT_SIZE(array, type) (((array_part_t *)array)->size * (type->object_size + type->offsets))
 

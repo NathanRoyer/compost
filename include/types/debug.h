@@ -38,4 +38,6 @@ size_t pta_print_cstr(array string);
 
 void pta_show(void * obj);
 
+void pta_show_pages(void * any_paged_address);
+
 #endif

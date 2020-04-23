@@ -106,7 +106,6 @@ void show_fields(void * obj, size_t recursion){
 	if (obj == NULL) return (void) printf(" (NULL)\n");
 	else if (pta_is_pointer(obj)) obj = *(void **)obj;
 	type_t * type = pta_type_of(obj);
-	if (type == UNDEFINED) return (void) printf(" (Undefined field)\n");
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
 		printf(" = ");
@@ -155,4 +154,26 @@ void show_fields(void * obj, size_t recursion){
 
 void pta_show(void * obj){
 	show_fields(obj, 0);
+}
+
+void pta_show_pages(void * any_paged_address){
+	root_page_t * rp = get_root_page(any_paged_address);
+	page_list_t * pgl = pta_get_c_object(rp->rt.page_list);
+	while (pgl){
+		for (void * refc = pgl->first_instance; PG_REL(refc) < rp->rt.page_limit; refc += rp->rt.paged_size){
+			if (*(void **)refc == NULL) continue;
+			type_t * type = pta_get_c_object(refc);
+			printf("Pages of a type with object_size = %li:\n", type->object_size);
+			page_list_t * type_pgl = pta_get_c_object(type->page_list);
+			while (type_pgl){
+				page_header_t * page = PG_START(type_pgl->first_instance);
+				size_t instances = page_occupied_slots(type_pgl->first_instance, type);
+				if (page->type != type) printf("Error with the following page type:\n");
+				printf("%p :\n\tflags: %hhx\n\tinstances: %li\n", page, page->flags, instances);
+				type_pgl = pta_get_c_object(type_pgl->next);
+			}
+
+		}
+		pgl = pta_get_c_object(pgl->next);
+	}
 }

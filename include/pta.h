@@ -61,9 +61,6 @@ typedef PTA_STRUCT type {
 	uint8_t flags;
 } pta_type_t;
 
-extern uint8_t pta_fake_type_undefined;
-#define PTA_UNDEFINED ((pta_type_t *)&pta_fake_type_undefined)
-
 typedef struct {
 	pta_type_t * rt;
 	pta_type_t * szt;
@@ -166,5 +163,7 @@ extern void pta_get_next_index(pta_obj dictionnary, pta_array * index);
 extern size_t pta_print_cstr(pta_array string);
 
 extern void pta_show(pta_obj obj);
+
+extern void pta_show_pages(void * any_pta_address);
 
 #endif

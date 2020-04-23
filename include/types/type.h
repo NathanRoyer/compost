@@ -61,9 +61,7 @@ typedef PTA_STRUCT type {
 } type_t;
 
 uint8_t fake_type_go_back;
-uint8_t fake_type_undefined;
 #define GO_BACK   ((type_t *)&fake_type_go_back)
-#define UNDEFINED ((type_t *)&fake_type_undefined)
 
 typedef struct {
 	type_t * rt;

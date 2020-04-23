@@ -145,7 +145,7 @@ void * pta_prepare(void * obj, type_t * type){
 									pta_prepare(new_field, (field_flags & FIBF_ARRAY) ? NULL : field_type);
 								} else should_zero = sizeof(void *); // independent pointer
 							} else pta_prepare(field, field_type); // nested
-						} else should_zero = field_flags & FIBF_POINTER ? sizeof(void *) : field_type->object_size; // do not auto instantiate
+						} else should_zero = (field_flags & FIBF_POINTER) ? sizeof(void *) : field_type->object_size; // do not auto instantiate
 
 						zero(field, should_zero, '\x00');
 					}
@@ -167,7 +167,7 @@ void * detach_field(void * host, void * field){
 	void * dependent = *(void **)field;
 	if (dependent != NULL){
 		void ** distant_refc = find_raw_refc(dependent);
-		if (*distant_refc == host) *distant_refc = NULL;
+		if (*distant_refc == find_raw_refc(host)) *distant_refc = NULL;
 		else misbound_error();
 		*(void **)field = NULL;
 	}
@@ -178,7 +178,7 @@ void * attach_field(void * host, void * field, void * dependent){
 	void * bck = detach_field(host, field);
 	void ** distant_refc = find_raw_refc(dependent);
 	if ((*distant_refc != NULL) && (*distant_refc != FAKE_DEPENDENT(distant_refc))) misbound_error();
-	*distant_refc = host;
+	*distant_refc = find_raw_refc(host);
 	*(void **)field = dependent;
 	return bck;
 }
@@ -244,11 +244,11 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
 	new_type->page_limit = compute_page_limit(new_type);
 
 	for (size_t i = 0; i < offsets; i++){
-		*GET_FIA(new_type, i) = (field_info_a_t){ UNDEFINED, 0 };
+		*GET_FIA(new_type, i) = (field_info_a_t){ NULL, 0 };
 	}
 
 	for (size_t i = 0; i < object_size; i++){
-		*GET_FIB(new_type, i) = (field_info_b_t){ UNDEFINED, TYPE_BASIC };
+		*GET_FIB(new_type, i) = (field_info_b_t){ NULL, TYPE_BASIC };
 	}
 
 	pta_decrement_refc(new_type_refc);
@@ -263,7 +263,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
 size_t find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_offset){
 	for (size_t i = 1; i < host_type->offsets; i++){
 		field_info_a_t * fia = GET_FIA(host_type, i);
-		if (fia->field_type == UNDEFINED){
+		if (fia->field_type == NULL){
 			*fia = (field_info_a_t){ field_type, fib_offset };
 			return i;
 		}
@@ -329,7 +329,7 @@ uint8_t pta_get_flags(void * obj){
 	obj_info_t info = get_info(obj);
 	uint8_t result;
 
-	if (info.offset >= info.page_type->offsets){
+	if (info.page_type->offsets && info.offset >= info.page_type->offsets){
 		size_t offset = info.offset - info.offsets_zone;
 		field_info_b_t * fib = GET_FIB(info.page_type, offset);
 		result = fib->flags;

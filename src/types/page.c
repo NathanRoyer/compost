@@ -357,6 +357,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 			pta_pages--;
 			munmap((void *)PG_START(pl->first_instance), pta_sys_page_size);
 			*find_raw_refc(pl_obj) = NULL; // reset refc
+			// TODO : when pages are deleted, the child page has a bad refc !
 			pl_obj = next_obj;
 		} else if (flags & PAGE_DEPENDENT){
 			// first gc iteration
