@@ -74,7 +74,7 @@ void * pta_dict_get_pa(void * d_refc, array key){
  * Return value: the value parameter
  */
 void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * value){
-	pta_increment_refc(d_refc);
+	bool unprotect = pta_protect(d_refc);
 	root_page_t * rp = get_root_page(d_refc);
 
 	dict_t * d = pta_get_c_object(d_refc);
@@ -103,12 +103,12 @@ void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * valu
 				}
 			} else if (dblk->key_part > c){
 				void * blk = pta_detach_dependent(dblkp);
-				pta_protect_detached(blk);
+				bool unprotect_blk = pta_protect(blk);
 				new_dict_block(dblkp, rp, c);
 				dblk_refc = *dblkp;
 				dblk = pta_get_c_object(dblk_refc);
+				if (unprotect_blk) pta_unprotect(blk);
 				pta_attach_dependent(&dblk->unequal, blk);
-				;
 			} else {
 				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, rp, c);
 				dblkp = &dblk->unequal;
@@ -118,9 +118,10 @@ void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * valu
 		}
 	}
 
-	pta_decrement_refc(d_refc);
+	if (unprotect) pta_unprotect(d_refc);
 
-	return *value_holder = value;
+	pta_set_reference(value_holder, value);
+	return value;
 }
 
 void * pta_dict_set_al(void * d_refc, void * key_al, void * value){

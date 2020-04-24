@@ -50,7 +50,7 @@ void * new_page(type_t * type, uint8_t flags){
 	);
 	pta_pages++;
 
-	pta_increment_refc(type);
+	// pta_increment_refc(type);
 	page->type = type;
 	page->flags = flags;
 
@@ -98,7 +98,7 @@ void * spot_internal(type_t * type, uint8_t flags){
 			void * pg_refc = pgl->first_instance;
 			if (flags == PG_FLAGS(PG_START(pg_refc))){
 				for (void * refc = pg_refc; PG_REL(refc) < type->page_limit; ){
-					if (*(void **)refc == NULL){
+					if (!is_obj_referenced(refc)){
 						reset_dependent_fields(refc, type);
 						return refc;
 					}
@@ -120,7 +120,7 @@ void * pta_spot(type_t * type){
 void * pta_spot_dependent(void * destination, type_t * type){
 	void ** new_spot;
 	uint8_t flags = pta_get_flags(destination);
-	if ((flags & FIBF_POINTER) && (flags & FIBF_DEPENDENT)){
+	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
 		new_spot = spot_internal(type, PAGE_DEPENDENT);
 		attach_field(pta_get_obj(destination), destination, new_spot);
 	} else new_spot = NULL;
@@ -151,7 +151,7 @@ void grow_array(array_part_t * array_part, type_t * type, size_t content_size){
 	array_part_t * next_part = array_part;
 	while (array_has_next(next_part)){
 		next_part = array_next(next_part, type);
-		if (*find_refc(next_part) != 0) break;
+		if (is_obj_referenced(next_part)) break;
 		array_part->following_free_space += sizeof(array_part_t) + ARRAY_CONTENT_SIZE(next_part, type) + next_part->following_free_space;
 	}
 	size_t available_slots = array_part->following_free_space / content_size;
@@ -276,7 +276,7 @@ void * pta_spot_array(type_t * type, size_t size){
 void * pta_spot_array_dependent(void * destination, type_t * type, size_t size){
 	void ** new_spot;
 	uint8_t flags = pta_get_flags(destination);
-	if ((flags & FIBF_POINTER) && (flags & FIBF_DEPENDENT)){
+	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
 		new_spot = spot_array_internal(type, size, PAGE_DEPENDENT);
 		attach_field(pta_get_obj(destination), destination, new_spot);
 	} else new_spot = NULL;
@@ -299,6 +299,21 @@ void * pta_array_get(array_part_t * array_part, size_t index){
 	return (void *)array_part + sizeof(array_part_t) + (index * (type->object_size + type->offsets));
 }
 
+size_t pta_array_find(array_part_t * array_part, void * item){
+	size_t index = 0;
+	type_t * type = PG_TYPE(array_part);
+	void * low_boundary;
+	while (true){
+		void * high_boundary = array_next(array_part, type);
+		low_boundary = array_part + 1; // 1 = sizeof(array_part_t) here
+		if (high_boundary > item && low_boundary <= item) break;
+		if (array_part->next_part == NULL) return (size_t)-1;
+		index += array_part->size;
+		array_part = array_part->next_part;
+	}
+	return index + ((size_t)((void *)item - low_boundary) / (type->object_size + type->offsets));
+}
+
 /* page_occupied_slots (obj pointer first_instance, type_t pointer type)
  * note: this function is not meant to be used externally.
  *
@@ -310,7 +325,7 @@ size_t page_occupied_slots(void * first_instance, type_t * type){
 	size_t n = 0;
 	uint8_t flags = PG_FLAGS(PG_START(first_instance));
 	for (void * refc = first_instance; PG_REL(refc) < type->page_limit;){
-		n += *find_refc(refc) != 0;
+		n += is_obj_referenced(refc);
 		if (flags & PAGE_ARRAY){
 			if (!array_has_next(refc)) break;
 			refc = array_next(refc, type);
@@ -353,17 +368,17 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 				}
 			}
 			// second gc iteration
-			pta_decrement_refc(type);
+			// pta_decrement_refc(type);
 			pta_pages--;
 			munmap((void *)PG_START(pl->first_instance), pta_sys_page_size);
-			*find_raw_refc(pl_obj) = NULL; // reset refc
+			// *find_raw_refc(pl_obj) = NULL; // reset refc
 			// TODO : when pages are deleted, the child page has a bad refc !
 			pl_obj = next_obj;
 		} else if (flags & PAGE_DEPENDENT){
 			// first gc iteration
 			// goal: detach all dependent objects
 			for (void * refc = pl->first_instance; PG_REL(refc) < type->page_limit;){
-				if (*(void **)refc != NULL && (*find_refc(refc) == 0)) *(void **)refc = NULL;
+				if (*(void **)refc != NULL && (!is_obj_referenced(refc))) *(void **)refc = NULL;
 				if (flags & PAGE_ARRAY){
 					if (!array_has_next(refc)) break;
 					refc = array_next(refc, type);

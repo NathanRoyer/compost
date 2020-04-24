@@ -34,13 +34,14 @@ typedef PTA_STRUCT {
 #define const_array(s) ((array){ sizeof(s) - 1, s })
 #define char_at(key, i) (((char *)key.data)[i])
 
-#define TYPE_BASIC     0b000000
-#define TYPE_PRIMITIVE 0b000001
-#define TYPE_INTERNAL  0b000010
-#define TYPE_MALLOC_F  0b000100
-#define TYPE_ARRAY     0b001000
-#define TYPE_CHAR      0b010000
-#define TYPE_ROOT      0b100000
+#define TYPE_BASIC     0b0000000
+#define TYPE_PRIMITIVE 0b0000001
+#define TYPE_INTERNAL  0b0000010
+#define TYPE_MALLOC_F  0b0000100
+#define TYPE_ARRAY     0b0001000
+#define TYPE_CHAR      0b0010000
+#define TYPE_ROOT      0b0100000
+#define TYPE_FIB       0b1000000
 
 #define GET_FIA(type, offset) ((field_info_a_t *)(pta_array_get(type->dfia, offset) + sizeof(uint8_t)))
 #define GET_FIB(type, offset) ((field_info_b_t *)(pta_array_get(type->dfib, offset) + sizeof(uint8_t)))

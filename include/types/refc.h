@@ -33,13 +33,13 @@ void ** find_raw_refc(void * address);
 
 void * pta_get_final_obj(void * address);
 
-#define find_refc(address) ((size_t *)pta_get_final_obj(address))
+void ** find_refc(void * address);
 
-void pta_protect_detached(void * obj);
+bool is_obj_referenced(void * obj);
 
-void pta_increment_refc(void * obj);
+bool pta_protect(void * obj);
 
-void pta_decrement_refc(void * obj);
+void pta_unprotect(void * obj);
 
 int pta_type_instances(type_t * type);
 

@@ -120,7 +120,7 @@ void zero(void * addr, size_t sz, char value){
 void * pta_prepare(void * obj, type_t * type){
 	if (type == NULL) type = pta_type_of(obj);
 	void * obj_c = pta_get_c_object(obj);
-	if (obj_c == obj) pta_increment_refc(obj);
+	bool unprotect = pta_protect(obj);
 
 	if (type->flags & TYPE_PRIMITIVE){
 		zero(obj_c, type->object_size, '\x00');
@@ -139,11 +139,11 @@ void * pta_prepare(void * obj, type_t * type){
 
 						uint8_t field_flags = pta_get_flags(field);
 						if ((field_flags & FIBF_AUTO_INST)){
-							if (field_flags & FIBF_POINTER){
-								if (field_flags & FIBF_DEPENDENT){
-									void * new_field = pta_spot_dependent(field, field_type);
-									pta_prepare(new_field, (field_flags & FIBF_ARRAY) ? NULL : field_type);
-								} else should_zero = sizeof(void *); // independent pointer
+							if ((field_flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
+								void * new_field = pta_spot_dependent(field, field_type);
+								pta_prepare(new_field, (field_flags & FIBF_ARRAY) ? NULL : field_type);
+							} else if (field_flags & FIBF_POINTER){
+								should_zero = sizeof(void *); // independent pointer
 							} else pta_prepare(field, field_type); // nested
 						} else should_zero = (field_flags & FIBF_POINTER) ? sizeof(void *) : field_type->object_size; // do not auto instantiate
 
@@ -154,13 +154,14 @@ void * pta_prepare(void * obj, type_t * type){
 		} while (str.data != NULL);
 	}
 
-	if (obj_c == obj) pta_decrement_refc(obj);
+	if (unprotect) pta_unprotect(obj);
 
 	return obj;
 }
 
 void misbound_error(){
 	printf("\nLibPTA anomaly: misbound instance\n");
+	*(char *)NULL = '\0';
 }
 
 void * detach_field(void * host, void * field){
@@ -186,13 +187,62 @@ void * attach_field(void * host, void * field, void * dependent){
 void * pta_detach_dependent(void * field){
 	void * host = pta_get_obj(field);
 	uint8_t flags = pta_get_flags(field);
-	return ((flags & FIBF_POINTER) && (flags & FIBF_DEPENDENT)) ? detach_field(host, field) : NULL;
+	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? detach_field(host, field) : NULL;
 }
 
 void * pta_attach_dependent(void * field, void * dependent_obj){
 	void * host = pta_get_obj(field);
 	uint8_t flags = pta_get_flags(field);
-	return ((flags & FIBF_POINTER) && (flags & FIBF_DEPENDENT)) ? attach_field(host, field, dependent_obj) : NULL;
+	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? attach_field(host, field, dependent_obj) : NULL;
+}
+
+void ** get_previous_owner(void * ref_field){
+	obj_info_t info = get_info(ref_field);
+	info.offset -= info.offsets_zone;
+	size_t prev_owner_i = info.page_type->object_size;
+	field_info_b_t * fib;
+	do {
+		prev_owner_i -= sizeof(void *);
+		fib = GET_FIB(info.page_type, prev_owner_i);
+		if ((fib->flags & FIBF_PREV_OWNER) == 0) return NULL;
+	} while (fib->field_type != (type_t *)info.offset);
+	return ref_field + prev_owner_i - info.offset;
+}
+
+void pta_set_reference(void * field, void * obj){
+	pta_clear_reference(field);
+	uint8_t flags = pta_get_flags(field);
+	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES && obj != NULL){
+		void ** refc = find_raw_refc(obj);
+		if (*refc != NULL) *get_previous_owner(field) = *refc;
+		*refc = field;
+	}
+	*(void **)field = obj;
+}
+
+void pta_clear_reference(void * field){
+	uint8_t flags = pta_get_flags(field);
+	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES && *(void **)field != NULL){
+		void ** refc = find_raw_refc(*(void **)field);
+		while (*refc != field && *refc != NULL){
+			refc = get_previous_owner(*refc);
+		}
+		*refc = *get_previous_owner(field);
+	}
+	*(void **)field = NULL;
+}
+
+void check_references(void ** orig_refc){
+	// sleep(1);
+	void ** refc = orig_refc;
+	while (*refc != NULL && *refc != orig_refc){
+		void ** prev_owner = get_previous_owner(*refc);
+		if (!is_obj_referenced(*refc)){
+			// detach
+			*(void **)*refc = NULL;
+			*refc = *prev_owner;
+		} else refc = prev_owner;
+	}
 }
 
 void reset_dependent_fields(void * refc, type_t * type){
@@ -200,7 +250,7 @@ void reset_dependent_fields(void * refc, type_t * type){
 	for (size_t i = 0; i < type->object_size; i++){
 		field_info_b_t * fib = GET_FIB(type, i);
 		void * field = refc + (offset + i);
-		if ((fib->flags & FIBF_POINTER) && (fib->flags & FIBF_DEPENDENT)) detach_field(refc, field);
+		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(refc, field);
 		else if (fib->flags & (FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 			*(void **)field = NULL;
@@ -217,17 +267,18 @@ void reset_dependent_fields(void * refc, type_t * type){
  * and the fields dictionnaries.
  * Return value: The created type object
  */
-void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t object_size, uint8_t flags){
+void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags){
 	size_t offsets = 1 + nested_objects; // add self offset
+	size_t prev_owners_size = referencers * sizeof(void *);
 	root_page_t * rp = get_root_page(any_paged_obj);
 
 	void * new_type_refc = pta_spot(&rp->rt);
-	pta_increment_refc(new_type_refc);
+	bool unprotect = pta_protect(new_type_refc);
 	type_t * new_type = pta_get_c_object(new_type_refc);
 
 	pta_prepare(new_type_refc, &rp->rt);
 
-	new_type->object_size = object_size;
+	new_type->object_size = object_size + prev_owners_size;
 	new_type->offsets = offsets;
 	new_type->page_list = NULL;
 	new_type->flags = flags;
@@ -235,7 +286,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
 	void * dyn_f = pta_spot_dependent(&new_type->dynamic_fields, &rp->dht);
 	void * stat_f = pta_spot_dependent(&new_type->static_fields, &rp->dht);
 	pta_spot_array_dependent(&new_type->dfia, &rp->fiat, offsets);
-	pta_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size);
+	pta_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size + prev_owners_size);
 
 	*(dict_t *)pta_get_c_object(dyn_f) = (dict_t){ NULL, NULL };
 	*(dict_t *)pta_get_c_object(stat_f) = (dict_t){ NULL, NULL };
@@ -248,10 +299,14 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
 	}
 
 	for (size_t i = 0; i < object_size; i++){
-		*GET_FIB(new_type, i) = (field_info_b_t){ NULL, TYPE_BASIC };
+		*GET_FIB(new_type, i) = (field_info_b_t){ NULL, FIBF_BASIC };
 	}
 
-	pta_decrement_refc(new_type_refc);
+	for (size_t i = object_size; i < object_size + prev_owners_size; i += sizeof(void *)){
+		*GET_FIB(new_type, i) = (field_info_b_t){ (void *)i, FIBF_PREV_OWNER };
+	}
+
+	if (unprotect) pta_unprotect(new_type_refc);
 	return new_type_refc;
 }
 
@@ -260,19 +315,19 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t objec
  * This function fills the first undefined fia with the provided fib_offset.
  * Return value: the freshly defined fia offset
  */
-size_t find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_offset){
+void * find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_offset){
 	for (size_t i = 1; i < host_type->offsets; i++){
 		field_info_a_t * fia = GET_FIA(host_type, i);
 		if (fia->field_type == NULL){
 			*fia = (field_info_a_t){ field_type, fib_offset };
-			return i;
+			return fia;
 		}
 	}
 	// the next line will segfault to prevent further execution.
 	// this is thrown if there is no more room for nested objects in this type spec.
 	*(char *)NULL = '\0';
 	// just to make compilers happy :
-	return 0;
+	return NULL;
 }
 
 /* pta_set_dynamic_field (type_t pointer type, type_t pointer field_type, 64bit offset, 8bit flags)
@@ -288,12 +343,12 @@ size_t find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_off
 size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array field_name, size_t fib_offset, uint8_t flags){
 	bool nested = !(field_type->flags & TYPE_PRIMITIVE) && !(flags & FIBF_POINTER);
 
-	size_t field_size, offset_from_refc;
+	size_t field_size = field_type->object_size;
+	void * field_info;
+	field_info_b_t * fib;
 
 	if (nested){
-		field_size = field_type->object_size;
-
-		offset_from_refc = find_and_fill_fia(host_type, field_type, fib_offset);
+		field_info = find_and_fill_fia(host_type, field_type, fib_offset);
 		// pta_print_cstr(field_name);
 		// printf(" (%li) - nested at %li\n", fib_offset, offset_from_refc);
 		if (field_type->offsets > 1){
@@ -304,18 +359,33 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 		}
 
 		for (size_t i = 0; i < field_size; i++){
-			*GET_FIB(host_type, fib_offset + i) = *GET_FIB(field_type, i);
+			fib = GET_FIB(host_type, fib_offset + i);
+			*fib = *GET_FIB(field_type, i);
 		}
 	} else {
-		field_size = (flags & FIBF_POINTER) ? sizeof(void *) : field_type->object_size;
-		offset_from_refc = host_type->offsets + fib_offset;
+		if (flags & FIBF_POINTER) field_size = sizeof(void *);
 		for (size_t i = 0; i < field_size; i++){
-			field_info_b_t * fib = GET_FIB(host_type, fib_offset + i);
-			if (i == 0) *fib = (field_info_b_t){ field_type, flags };
-			else *fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
+			fib = GET_FIB(host_type, fib_offset + i);
+			if (i == 0){
+				*fib = (field_info_b_t){ field_type, flags };
+				field_info = fib;
+			} else *fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
+		}
+		if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES){
+			size_t prev_owner_i = host_type->object_size;
+			do {
+				prev_owner_i -= sizeof(void *);
+				fib = GET_FIB(host_type, prev_owner_i);
+				if (fib->flags & FIBF_PREV_OWNER){
+					if (fib->field_type == (void *)prev_owner_i){
+						fib->field_type = (void *)fib_offset;
+						break;
+					}
+				} else break;
+			} while (true);
 		}
 	}
-	pta_dict_set_pa(host_type->dynamic_fields, field_name, (void *)offset_from_refc);
+	pta_dict_set_pa(host_type->dynamic_fields, field_name, pta_get_obj(field_info));
 	return field_size;
 }
 
@@ -351,10 +421,13 @@ void * pta_get_field(void * obj, array field_name){
 	}
 	obj_info_t info = get_info(obj);
 	type_t * field_type = pta_type_of(obj);
-	size_t new_offset = (size_t)pta_dict_get_pa(field_type->dynamic_fields, field_name);
 
-	if (new_offset >= field_type->offsets){
-		new_offset -= field_type->offsets;
+	void * field_info = pta_dict_get_pa(field_type->dynamic_fields, field_name);
+	type_t * field_info_type = pta_type_of(field_info);
+	bool fib = field_info_type->flags & TYPE_FIB;
+	size_t new_offset = pta_array_find(fib ? field_type->dfib : field_type->dfia, field_info);
+
+	if (fib){
 		new_offset += info.offsets_zone;
 		if (info.offset > 0 && info.offset < info.page_type->offsets){
 			new_offset += GET_FIA(info.page_type, info.offset)->data_offset;

@@ -156,6 +156,15 @@ void pta_show(void * obj){
 	show_fields(obj, 0);
 }
 
+void pta_show_references(void * obj){
+	void ** orig_refc = pta_get_final_obj(obj);
+	void ** refc = orig_refc;
+	while (*refc != NULL && *refc != orig_refc){
+		printf("referencer: %p\n", *refc);
+		refc = get_previous_owner(*refc);
+	}
+}
+
 void pta_show_pages(void * any_paged_address){
 	root_page_t * rp = get_root_page(any_paged_address);
 	page_list_t * pgl = pta_get_c_object(rp->rt.page_list);

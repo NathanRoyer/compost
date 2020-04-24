@@ -29,13 +29,15 @@ typedef PTA_STRUCT field_info_b field_info_b_t;
 #include "dict.h"
 #include "refc.h"
 
-#define FIBF_BASIC      0b000000
-#define FIBF_DEPENDENT  0b000001
-#define FIBF_AUTO_INST  0b000010
-#define FIBF_POINTER    0b000100
-#define FIBF_NESTED     0b001000
-#define FIBF_ARRAY      0b010000
-#define FIBF_MALLOC     0b100000
+#define FIBF_BASIC      0b00000000
+#define FIBF_POINTER    0b00000001
+#define FIBF_AUTO_INST  0b00000010
+#define FIBF_DEPENDENT  0b00000101 // includes FIBF_POINTER
+#define FIBF_NESTED     0b00001000
+#define FIBF_ARRAY      0b00010000
+#define FIBF_MALLOC     0b00100000
+#define FIBF_REFERENCES 0b01000001 // includes FIBF_POINTER
+#define FIBF_PREV_OWNER 0b10000000
 
 typedef PTA_STRUCT field_info_a {
 	type_t * field_type;
@@ -61,11 +63,15 @@ void * pta_detach_dependent(void * field);
 
 void * pta_attach_dependent(void * destination, void * dependent);
 
-void pta_empty_field(void * field);
+void ** get_previous_owner(void * ref_field);
+
+void pta_set_reference(void * field, void * obj);
+
+void pta_clear_reference(void * field);
 
 void reset_dependent_fields(void * refc, type_t * type);
 
-void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t object_size, uint8_t flags);
+void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags);
 
 size_t pta_set_dynamic_field(type_t * type, type_t * field_type, array field_name, size_t offset, uint8_t flags);
 

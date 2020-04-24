@@ -55,12 +55,24 @@ pta_array next_arg(pta_array * cmd){
 
 int main(int argc, char *argv[]){
 	pta_context_t ctx = pta_setup();
+	pta_obj variables1 = pta_prepare(pta_spot(ctx.dht), ctx.dht);
+	pta_protect(variables1);
 	variables = pta_prepare(pta_spot(ctx.dht), ctx.dht);
-	pta_increment_refc(variables);
+	pta_protect(variables);
 	pta_dict_set_pa(variables, pta_const_array("type_t"), pta_get_obj(ctx.rt));
 	pta_dict_set_pa(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
 	pta_dict_set_pa(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
+	printf("1:\n");
+	pta_show_references(ctx.dht);
 	pta_dict_set_pa(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
+	printf("2:\n");
+	pta_show_references(ctx.dht);
+	pta_dict_set_pa(variables1, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
+	printf("3:\n");
+	pta_show_references(ctx.dht);
+	pta_dict_set_pa(variables, pta_const_array("dict_t"), NULL);
+	printf("4:\n");
+	pta_show_references(ctx.dht);
 
 	bool running = true;
 	while (running){
@@ -82,7 +94,7 @@ int main(int argc, char *argv[]){
 						void * new_var = pta_prepare(pta_spot(var_t), var_t);
 						printf("spotted\n");
 						pta_dict_set_pa(variables, instance_name, new_var);
-						pta_increment_refc(new_var);
+						pta_protect(new_var);
 					} else {
 						printf("Argument ");
 						pta_print_cstr(type_name);
@@ -96,14 +108,18 @@ int main(int argc, char *argv[]){
 
 				char * object_size_str = readline("object size ? ");
 				char * offsets_str = readline("nested objects ? ");
-				void * new_type_refc = pta_create_type(ctx.szt, atoi(offsets_str), atoi(object_size_str), PTA_TYPE_BASIC);
+				char * referencers_str = readline("referencers ? ");
+				size_t referencers = atoi(referencers_str);
+				printf("referencers: %li\n", referencers);
+				void * new_type_refc = pta_create_type(ctx.szt, atoi(offsets_str), referencers, atoi(object_size_str), PTA_TYPE_BASIC);
+				free(referencers_str);
 				free(offsets_str);
 				free(object_size_str);
 
 				printf("New type: ");
 				pta_print_cstr(new_type_name);
 				printf(", %p\n", new_type_refc);
-				pta_increment_refc(new_type_refc);
+				pta_protect(new_type_refc);
 				pta_dict_set_pa(variables, new_type_name, new_type_refc);
 
 				pta_type_t * new_type = pta_get_c_object(new_type_refc);
@@ -111,7 +127,7 @@ int main(int argc, char *argv[]){
 
 				printf("Specify the fields :\n");
 				printf("format: [distant] type_name field_name\n");
-				while (field_offset < new_type->object_size){
+				while (field_offset < (new_type->object_size - (referencers * sizeof(void *)))){
 					char * type_name_cstr = readline("T: ");
 					pta_array type_name = cstrarray(type_name_cstr);
 					pta_array field_name = next_arg(&type_name);

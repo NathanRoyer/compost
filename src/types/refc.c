@@ -35,37 +35,30 @@ void ** find_raw_refc(void * address){
 void * pta_get_final_obj(void * address){
 	// void * bckdbg = address;
 	address = find_raw_refc(address);
-	while (PG_FLAG(PG_START(address), PAGE_DEPENDENT) && *(void **)address != NULL) address = *(void **)address;
+	while (PG_FLAG(PG_START(address), PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address) address = *(void **)address;
 	return address;
 }
 
-size_t pta_get_refc(void * address){
-	return *find_refc(address);
+void ** find_refc(void * address){
+	void ** indep_refc = pta_get_final_obj(address);
+	if (*indep_refc != indep_refc) check_references(indep_refc);
+	return indep_refc;
 }
 
-void pta_protect_detached(void * obj){
+bool pta_protect(void * obj){
 	void ** refc = find_raw_refc(obj);
-	if (*refc == NULL) *refc = FAKE_DEPENDENT(refc);
+	bool result = (*refc == NULL);
+	if (result) *refc = FAKE_DEPENDENT(refc);
+	return result;
 }
 
-/* increment_refc (object pointer obj)
- *
- * Increments the reference counter of an object.
- * Return value: none
- */
-void pta_increment_refc(void * obj){
-	(*find_refc(obj))++;
+void pta_unprotect(void * obj){
+	void ** refc = find_raw_refc(obj);
+	if (*refc == FAKE_DEPENDENT(refc)) *refc = NULL;
 }
 
-/* decrement_refc (object pointer obj)
- *
- * Decrements the reference counter of an object. If the object
- * has no more references after the decrementation, the TYPE_HAS_UNREF
- * flag will be set on the object type.
- * Return value: none
- */
-void pta_decrement_refc(void * obj){
-	(*find_refc(obj))--;
+bool is_obj_referenced(void * obj){
+	return NULL != *find_refc(obj);
 }
 
 /* type_instances (type_t pointer type)
@@ -103,6 +96,10 @@ void pta_remove_superfluous_pages(type_t * type, bool should_delete){
  * Return value: none
  */
 void pta_garbage_collect(type_t * root_type){
+	/*
+	 * TODO : pre-run to subtract independent-references that
+	 * are unreferenced themselves
+	 */
 	page_list_t * pgl, * pgl_bck = pta_get_c_object(root_type->page_list);
 	for (size_t i = 0; i < 2; i++){
 		pgl = pgl_bck;

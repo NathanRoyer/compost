@@ -44,8 +44,8 @@ typedef void * pta_obj;
 #define PTA_TYPE_RSV2      0b00001000
 #define PTA_TYPE_RSV3      0b00010000
 #define PTA_TYPE_RSV4      0b00100000
-#define PTA_TYPE_FLAG_2    0b01000000 // you can use this one
-#define PTA_TYPE_FLAG_3    0b10000000 // you can use this one
+#define PTA_TYPE_RSV5      0b01000000
+#define PTA_TYPE_CSTM_FLAG 0b10000000 // you can define and use this one
 
 typedef PTA_STRUCT type {
 	pta_obj dfia;
@@ -91,16 +91,16 @@ void pta_resize_array(pta_obj array, size_t length);
 
 void * pta_array_get(pta_obj array, size_t index);
 
+size_t pta_array_find(pta_obj array, pta_obj item);
+
 // field.h
-#define PTA_FIELD_BASIC     0b000000
-#define PTA_FIELD_DEPENDENT 0b000001
-#define PTA_FIELD_AUTO_INST 0b000010
-#define PTA_FIELD_POINTER   0b000100
-#define PTA_FIELD_ARRAY     0b010101
-// free will be called on these fields upon garbage collection :
-#define PTA_FIELD_MALLOC    0b100000
-// please declare them with a primitive type which can hold a pointer.
-// types with such fields must have the PTA_TYPE_MALLOC_F flag.
+#define PTA_FIELD_BASIC      0b0000000
+#define PTA_FIELD_POINTER    0b0000001
+#define PTA_FIELD_AUTO_INST  0b0000010
+#define PTA_FIELD_DEPENDENT  0b0000101
+#define PTA_FIELD_ARRAY      0b0010101
+#define PTA_FIELD_MALLOC     0b0100000
+#define PTA_FIELD_REFERENCES 0b1000010
 
 extern pta_type_t * pta_type_of(pta_obj obj);
 
@@ -112,7 +112,7 @@ extern void * pta_detach_dependent(void * field);
 
 extern void * pta_attach_dependent(void * destination, void * dependent);
 
-extern void * pta_create_type(void * any_pta_address, size_t nested_objects, size_t object_size, uint8_t flags);
+extern void * pta_create_type(void * any_pta_address, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags);
 
 extern size_t pta_set_dynamic_field(pta_type_t * type, pta_type_t * field_type, pta_array field_name, size_t offset, uint8_t flags);
 
@@ -130,9 +130,9 @@ extern pta_obj pta_get_final_obj(pta_obj address);
 
 extern size_t pta_get_refc(pta_obj address);
 
-extern void pta_increment_refc(pta_obj obj);
+extern bool pta_protect(pta_obj address);
 
-extern void pta_decrement_refc(pta_obj obj);
+extern void pta_unprotect(pta_obj address);
 
 extern int pta_type_instances(pta_type_t * type);
 
@@ -163,6 +163,8 @@ extern void pta_get_next_index(pta_obj dictionnary, pta_array * index);
 extern size_t pta_print_cstr(pta_array string);
 
 extern void pta_show(pta_obj obj);
+
+extern void pta_show_references(pta_obj obj);
 
 extern void pta_show_pages(void * any_pta_address);
 

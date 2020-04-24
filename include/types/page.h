@@ -92,6 +92,8 @@ void pta_resize_array(array_part_t * array_part, size_t length);
 
 void * pta_array_get(array_part_t * array_part, size_t index);
 
+size_t pta_array_find(array_part_t * array_part, void * item);
+
 size_t page_occupied_slots(void * pg_refc, type_t * type);
 
 void * update_page_list(void * pl_obj, type_t * type, bool should_delete);
