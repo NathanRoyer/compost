@@ -39,26 +39,26 @@ void * pta_get_final_obj(void * address){
 	return address;
 }
 
-void ** find_refc(void * address){
+void ** find_refc(void * address, recursive_call_t * rec){
 	void ** indep_refc = pta_get_final_obj(address);
-	if (*indep_refc != indep_refc) check_references(indep_refc);
+	if (*indep_refc != indep_refc) check_references(indep_refc, rec);
 	return indep_refc;
 }
 
 bool pta_protect(void * obj){
-	void ** refc = find_raw_refc(obj);
+	void ** refc = find_refc(obj, NULL);
 	bool result = (*refc == NULL);
 	if (result) *refc = FAKE_DEPENDENT(refc);
 	return result;
 }
 
 void pta_unprotect(void * obj){
-	void ** refc = find_raw_refc(obj);
+	void ** refc = find_refc(obj, NULL);
 	if (*refc == FAKE_DEPENDENT(refc)) *refc = NULL;
 }
 
 bool is_obj_referenced(void * obj){
-	return NULL != *find_refc(obj);
+	return *find_refc(obj, NULL) != NULL;
 }
 
 /* type_instances (type_t pointer type)

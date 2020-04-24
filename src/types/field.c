@@ -210,12 +210,14 @@ void ** get_previous_owner(void * ref_field){
 }
 
 void pta_set_reference(void * field, void * obj){
-	pta_clear_reference(field);
 	uint8_t flags = pta_get_flags(field);
-	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES && obj != NULL){
-		void ** refc = find_raw_refc(obj);
-		if (*refc != NULL) *get_previous_owner(field) = *refc;
-		*refc = field;
+	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES){
+		if (obj != NULL){
+			pta_unprotect(obj);
+			void ** refc = pta_get_final_obj(obj);
+			if (*refc != NULL) *get_previous_owner(field) = *refc;
+			*refc = field;
+		} else pta_clear_reference(field);
 	}
 	*(void **)field = obj;
 }
@@ -223,7 +225,7 @@ void pta_set_reference(void * field, void * obj){
 void pta_clear_reference(void * field){
 	uint8_t flags = pta_get_flags(field);
 	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES && *(void **)field != NULL){
-		void ** refc = find_raw_refc(*(void **)field);
+		void ** refc = pta_get_final_obj(*(void **)field);
 		while (*refc != field && *refc != NULL){
 			refc = get_previous_owner(*refc);
 		}
@@ -232,12 +234,16 @@ void pta_clear_reference(void * field){
 	*(void **)field = NULL;
 }
 
-void check_references(void ** orig_refc){
-	// sleep(1);
-	void ** refc = orig_refc;
-	while (*refc != NULL && *refc != orig_refc){
+void check_references(void ** refc, recursive_call_t * rec){
+	// check for infinite recursive calls:
+	recursive_call_t next_rec = { refc, rec };
+	while (rec){
+		if (rec->arg == refc) return;
+		else rec = rec->next;
+	}
+	while (*refc != NULL){
 		void ** prev_owner = get_previous_owner(*refc);
-		if (!is_obj_referenced(*refc)){
+		if (*find_refc(*refc, &next_rec) == NULL){
 			// detach
 			*(void **)*refc = NULL;
 			*refc = *prev_owner;
@@ -245,15 +251,17 @@ void check_references(void ** orig_refc){
 	}
 }
 
-void reset_dependent_fields(void * refc, type_t * type){
+void reset_fields(void * refc, type_t * type){
 	size_t offset = type->paged_size - type->object_size;
 	for (size_t i = 0; i < type->object_size; i++){
 		field_info_b_t * fib = GET_FIB(type, i);
 		void * field = refc + (offset + i);
 		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(refc, field);
-		else if (fib->flags & (FIBF_MALLOC) && (*(void **)field != NULL)){
+		else if ((fib->flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 			*(void **)field = NULL;
+		} else if ((fib->flags & FIBF_REFERENCES) && (*(void **)field != NULL)){
+			pta_clear_reference(field);
 		}
 	}
 }

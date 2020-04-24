@@ -24,6 +24,12 @@
 
 typedef void * refc_t;
 
+typedef struct recursive_call recursive_call_t;
+typedef struct recursive_call {
+	void * arg;
+	recursive_call_t * next;
+} recursive_call_t;
+
 #include "page.h"
 
 // a direct self-reference is used as fake dependence
@@ -33,7 +39,7 @@ void ** find_raw_refc(void * address);
 
 void * pta_get_final_obj(void * address);
 
-void ** find_refc(void * address);
+void ** find_refc(void * address, recursive_call_t * rec);
 
 bool is_obj_referenced(void * obj);
 

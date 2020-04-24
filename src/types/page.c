@@ -99,7 +99,7 @@ void * spot_internal(type_t * type, uint8_t flags){
 			if (flags == PG_FLAGS(PG_START(pg_refc))){
 				for (void * refc = pg_refc; PG_REL(refc) < type->page_limit; ){
 					if (!is_obj_referenced(refc)){
-						reset_dependent_fields(refc, type);
+						reset_fields(refc, type);
 						return refc;
 					}
 					if (flags & PAGE_ARRAY){

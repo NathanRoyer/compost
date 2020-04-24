@@ -55,24 +55,12 @@ pta_array next_arg(pta_array * cmd){
 
 int main(int argc, char *argv[]){
 	pta_context_t ctx = pta_setup();
-	pta_obj variables1 = pta_prepare(pta_spot(ctx.dht), ctx.dht);
-	pta_protect(variables1);
 	variables = pta_prepare(pta_spot(ctx.dht), ctx.dht);
 	pta_protect(variables);
 	pta_dict_set_pa(variables, pta_const_array("type_t"), pta_get_obj(ctx.rt));
 	pta_dict_set_pa(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
 	pta_dict_set_pa(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
-	printf("1:\n");
-	pta_show_references(ctx.dht);
 	pta_dict_set_pa(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
-	printf("2:\n");
-	pta_show_references(ctx.dht);
-	pta_dict_set_pa(variables1, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
-	printf("3:\n");
-	pta_show_references(ctx.dht);
-	pta_dict_set_pa(variables, pta_const_array("dict_t"), NULL);
-	printf("4:\n");
-	pta_show_references(ctx.dht);
 
 	bool running = true;
 	while (running){
