@@ -71,6 +71,15 @@ int main(int argc, char *argv[]){
 		else if (CMD("show")){
 			void * var = get_var(arg);
 			if (var) pta_show(var);
+		} else if (CMD("fields")){
+			void * var = get_var(arg);
+			if (var){
+				if (pta_type_of(var) == ctx.rt){
+					pta_print_fields(NULL, pta_get_c_object(var));
+				} else {
+					pta_print_fields(var, NULL);
+				}
+			}
 		} else if (CMD("new")){
 			pta_array type_name = arg;
 			pta_array instance_name = next_arg(&type_name);
@@ -115,8 +124,9 @@ int main(int argc, char *argv[]){
 
 				printf("Specify the fields :\n");
 				printf("format: [distant] type_name field_name\n");
-				while (field_offset < (new_type->object_size - (referencers * sizeof(void *)))){
+				for (;;){
 					char * type_name_cstr = readline("T: ");
+					if (strcmp(type_name_cstr, "end") == 0) break;
 					pta_array type_name = cstrarray(type_name_cstr);
 					pta_array field_name = next_arg(&type_name);
 					bool is_pointer = strcmp(type_name.data, "distant") == 0;

@@ -164,6 +164,8 @@ extern size_t pta_print_cstr(pta_array string);
 
 extern void pta_show(pta_obj obj);
 
+extern void pta_print_fields(pta_obj obj, pta_type_t * type);
+
 extern void pta_show_references(pta_obj obj);
 
 extern void pta_show_pages(void * any_pta_address);

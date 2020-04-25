@@ -30,29 +30,60 @@ void print_color(int n, bool inverted){
 	printf("\033[%c8:5:%im", inverted ? '3' : '4', n);
 }
 
-void print_fields(void * obj){
-	void * refc = pta_get_obj(obj);
-	type_t * type = pta_type_of(refc);
-	uint8_t flags;
-	printf("fia:\n");
+#define IS_(flags, flag) ((flags & flag) == flag)
+
+char field_flags_str[] = "ffff";
+void load_fields(uint8_t flags){
+	int i = 0;
+	/**/ if (IS_(flags, FIBF_ARRAY     )) field_flags_str[i] = 'A';
+	else if (IS_(flags, FIBF_DEPENDENT )) field_flags_str[i] = 'D';
+	else if (IS_(flags, FIBF_REFERENCES)) field_flags_str[i] = 'R';
+	else if (IS_(flags, FIBF_POINTER   )) field_flags_str[i] = 'P';
+	else field_flags_str[i] = '-';
+	i++;
+	/**/ if (IS_(flags, FIBF_AUTO_INST )) field_flags_str[i] = 'I';
+	else field_flags_str[i] = '-';
+	i++;
+	/**/ if (IS_(flags, FIBF_NESTED    )) field_flags_str[i] = 'N';
+	else field_flags_str[i] = '-';
+	i++;
+	/**/ if (IS_(flags, FIBF_MALLOC    )) field_flags_str[i] = 'M';
+	else if (IS_(flags, FIBF_PREV_OWNER)) field_flags_str[i] = 'O';
+	else field_flags_str[i] = '-';
+}
+
+void pta_print_fields(void * obj, type_t * type){
+	void * refc = obj ? pta_get_obj(obj) : NULL;
+	if (!obj) obj = (void *)-1;
+	if (type == NULL) type = pta_type_of(refc);
+	printf("\n+- Field Info A -------------------+\n| OFST |        TYPE        | DEST |\n");
+	printf("+------+--------------------+------+\n");
 	for (size_t i = 0; i < type->offsets; i++){
 		if (refc + i == obj) print_color(0, false);
-		flags = pta_get_flags(refc + i);
-		if (i == 0){
-			printf("%li |      self      | x | x\033[m\n", i);
-		} else {
+		printf("| %04li | ", i);
+		if (i == 0) printf("       self        | ----");
+		else {
 			field_info_a_t * fia = GET_FIA(type, i);
-			printf("%li | %p | %li | %hhi\033[m\n", i, fia->field_type, fia->data_offset, flags);
+			if (fia->field_type == GO_BACK) printf("↑                ↑");
+			else printf("%018p", fia->field_type);
+			printf(" | %04li", fia->data_offset);
 		}
+		printf(" |\033[m\n");
 	}
-	printf("fib:\n");
+	printf("+------+--------------------+------+\n");
+	printf("\n+- Field Info B -------------------+\n| OFST |        TYPE        | FLAG |\n");
+	printf("+------+--------------------+------+\n");
 	refc = pta_get_c_object(refc);
 	for (size_t i = 0; i < type->object_size; i++){
-		flags = pta_get_flags(refc + i);
 		field_info_b_t * fib = GET_FIB(type, i);
 		if (refc + i == obj) print_color(0, false);
-		printf("%li | %p | %li | %hhi\033[m\n", i, fib->field_type, fib->flags, flags);
+		printf("| %04li | ", i);
+		if (fib->field_type == GO_BACK) printf("↑                ↑");
+		else printf("%018p", fib->field_type);
+		load_fields(fib->flags);
+		printf(" | %s |\033[m\n", field_flags_str);
 	}
+	printf("+------+--------------------+------+\n");
 }
 
 void print_char(char c){

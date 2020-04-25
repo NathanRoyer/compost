@@ -36,6 +36,8 @@ typedef PTA_STRUCT dbg_field_info {
 
 size_t pta_print_cstr(array string);
 
+void pta_print_fields(void * obj, type_t * type);
+
 void pta_show(void * obj);
 
 void pta_show_references(void * obj);

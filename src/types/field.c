@@ -277,7 +277,7 @@ void reset_fields(void * refc, type_t * type){
  */
 void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags){
 	size_t offsets = 1 + nested_objects; // add self offset
-	size_t prev_owners_size = referencers * sizeof(void *);
+	object_size += referencers * sizeof(void *);
 	root_page_t * rp = get_root_page(any_paged_obj);
 
 	void * new_type_refc = pta_spot(&rp->rt);
@@ -286,7 +286,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 
 	pta_prepare(new_type_refc, &rp->rt);
 
-	new_type->object_size = object_size + prev_owners_size;
+	new_type->object_size = object_size;
 	new_type->offsets = offsets;
 	new_type->page_list = NULL;
 	new_type->flags = flags;
@@ -294,7 +294,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 	void * dyn_f = pta_spot_dependent(&new_type->dynamic_fields, &rp->dht);
 	void * stat_f = pta_spot_dependent(&new_type->static_fields, &rp->dht);
 	pta_spot_array_dependent(&new_type->dfia, &rp->fiat, offsets);
-	pta_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size + prev_owners_size);
+	pta_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size);
 
 	*(dict_t *)pta_get_c_object(dyn_f) = (dict_t){ NULL, NULL };
 	*(dict_t *)pta_get_c_object(stat_f) = (dict_t){ NULL, NULL };
@@ -306,12 +306,14 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 		*GET_FIA(new_type, i) = (field_info_a_t){ NULL, 0 };
 	}
 
-	for (size_t i = 0; i < object_size; i++){
-		*GET_FIB(new_type, i) = (field_info_b_t){ NULL, FIBF_BASIC };
-	}
-
-	for (size_t i = object_size; i < object_size + prev_owners_size; i += sizeof(void *)){
-		*GET_FIB(new_type, i) = (field_info_b_t){ (void *)i, FIBF_PREV_OWNER };
+	for (size_t i = object_size - 1;; i--){
+		field_info_b_t * fib = GET_FIB(new_type, i);
+		if (((object_size - i) % sizeof(void *)) == 0){
+			*fib = (field_info_b_t){ (void *)i, FIBF_PREV_OWNER };
+		} else {
+			*fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
+		}
+		if (i == 0) break;
 	}
 
 	if (unprotect) pta_unprotect(new_type_refc);
@@ -336,6 +338,23 @@ void * find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_off
 	*(char *)NULL = '\0';
 	// just to make compilers happy :
 	return NULL;
+}
+
+void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
+	size_t prev_owner_i = host_type->object_size;
+	do {
+		prev_owner_i -= sizeof(void *);
+		field_info_b_t * fib = GET_FIB(host_type, prev_owner_i);
+		if (fib->flags & FIBF_PREV_OWNER){
+			if (fib->field_type == (void *)prev_owner_i){
+				fib->field_type = (void *)fib_offset;
+				return;
+			}
+		} else break;
+	} while (true);
+	// the next line will segfault to prevent further execution.
+	// this is thrown if there is no more room for nested objects in this type spec.
+	*(char *)NULL = '\0';
 }
 
 /* pta_set_dynamic_field (type_t pointer type, type_t pointer field_type, 64bit offset, 8bit flags)
@@ -366,10 +385,22 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 			}
 		}
 
-		for (size_t i = 0; i < field_size; i++){
-			fib = GET_FIB(host_type, fib_offset + i);
-			*fib = *GET_FIB(field_type, i);
+		size_t ref_fields_count = 0;
+		for (size_t i = 0; i < field_type->object_size; i++){
+			fib = GET_FIB(field_type, i);
+			if (fib->flags & FIBF_PREV_OWNER){
+				ref_fields_count--;
+				field_size -= sizeof(void *);
+				i += sizeof(void *) - 1;
+			} else {
+				if ((fib->flags & FIBF_REFERENCES) == FIBF_REFERENCES){
+					find_and_fill_prev_owner(host_type, fib_offset + i);
+					ref_fields_count++;
+				}
+				*GET_FIB(host_type, fib_offset + i) = *fib;
+			}
 		}
+		if (ref_fields_count) printf("\nLibPTA anomaly: bad field type\n");
 	} else {
 		if (flags & FIBF_POINTER) field_size = sizeof(void *);
 		for (size_t i = 0; i < field_size; i++){
@@ -380,17 +411,7 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 			} else *fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
 		}
 		if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES){
-			size_t prev_owner_i = host_type->object_size;
-			do {
-				prev_owner_i -= sizeof(void *);
-				fib = GET_FIB(host_type, prev_owner_i);
-				if (fib->flags & FIBF_PREV_OWNER){
-					if (fib->field_type == (void *)prev_owner_i){
-						fib->field_type = (void *)fib_offset;
-						break;
-					}
-				} else break;
-			} while (true);
+			find_and_fill_prev_owner(host_type, fib_offset);
 		}
 	}
 	pta_dict_set_pa(host_type->dynamic_fields, field_name, pta_get_obj(field_info));
