@@ -84,9 +84,6 @@ type_t * pta_type_of(void * obj){
 			fib = GET_FIB(info.page_type, info.offset--);
 			field_type = fib->field_type;
 		} while (field_type == GO_BACK);
-		if (fib->flags & FIBF_ARRAY){
-			field_type = &(get_root_page(obj)->art);
-		}
 	}
 	return field_type;
 }
