@@ -100,7 +100,9 @@ size_t pta_array_find(pta_obj array, pta_obj item);
 #define PTA_FIELD_DEPENDENT  0b0000101
 #define PTA_FIELD_ARRAY      0b0010101
 #define PTA_FIELD_MALLOC     0b0100000
-#define PTA_FIELD_REFERENCES 0b1000010
+#define PTA_FIELD_REFERENCES 0b1000001
+
+extern pta_obj pta_get_obj(pta_obj address);
 
 extern pta_type_t * pta_type_of(pta_obj obj);
 
@@ -111,6 +113,10 @@ extern pta_obj pta_prepare(pta_obj obj, pta_type_t * type);
 extern void * pta_detach_dependent(void * field);
 
 extern void * pta_attach_dependent(void * destination, void * dependent);
+
+extern void pta_set_reference(pta_obj * field, pta_obj obj);
+
+extern void pta_clear_reference(pta_obj * field);
 
 extern void * pta_create_type(void * any_pta_address, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags);
 
@@ -124,8 +130,6 @@ void * pta_get_field(void * obj, pta_array field_name);
 
 
 // refc.h
-extern pta_obj pta_get_obj(pta_obj address);
-
 extern pta_obj pta_get_final_obj(pta_obj address);
 
 extern size_t pta_get_refc(pta_obj address);

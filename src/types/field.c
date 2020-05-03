@@ -218,7 +218,7 @@ void pta_set_reference(void * field, void * obj){
 			if (*refc != NULL) *get_previous_owner(field) = *refc;
 			*refc = field;
 		} else pta_clear_reference(field);
-	}
+	} else misbound_error(); // maybe tmp but i wanna know if it happens
 	*(void **)field = obj;
 }
 
@@ -354,6 +354,7 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
 	} while (true);
 	// the next line will segfault to prevent further execution.
 	// this is thrown if there is no more room for nested objects in this type spec.
+	printf("\nLibPTA anomaly: this type doesn\'t have room for referencers.\n");
 	*(char *)NULL = '\0';
 }
 
