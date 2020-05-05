@@ -27,9 +27,9 @@ typedef struct obj_info {
 } obj_info_t;
 
 obj_info_t get_info(void * obj){
-	page_header_t * page = PG_START(obj);
+	page_desc_t * page = locate_page_descriptor(obj);
 	size_t offset;
-	if (PG_FLAG(page, PAGE_ARRAY)){
+	if (page->flags & PAGE_ARRAY){
 		array_part_t * array_part = PG_REFC(page), * next_ap;
 		while (true){
 			next_ap = array_next(array_part, page->type);
@@ -50,7 +50,7 @@ obj_info_t get_info(void * obj){
 			offset = obj - ((void *)array_part + sizeof(array_part_t));
 			offset %= page->type->object_size + page->type->offsets;
 		}
-	} else offset = (PG_REL(obj - sizeof(page_header_t))) % page->type->paged_size;
+	} else offset = (PG_REL(obj - sizeof(page_desc_t))) % page->type->paged_size;
 	return (obj_info_t){
 		(page->flags & PAGE_ARRAY) ? page->type->offsets : GET_OFFSET_ZONE(page->type),
 		offset, page->type, page->flags

@@ -20,8 +20,8 @@
 #include "types/refc.h"
 
 void ** find_raw_refc(void * address){
-	page_header_t * page = PG_START(address);
-	if (PG_FLAG(page, PAGE_ARRAY)){
+	page_desc_t * page = locate_page_descriptor(address);
+	if (page->flags & PAGE_ARRAY){
 		array_part_t * array_part = PG_REFC(page), * next_ap;
 		while (true){
 			next_ap = array_next(array_part, page->type);
@@ -29,13 +29,13 @@ void ** find_raw_refc(void * address){
 			else array_part = next_ap;
 		}
 		return (void **)&array_part->refc;
-	} else return address - ((PG_REL(address) - sizeof(page_header_t)) % page->type->paged_size);
+	} else return address - ((PG_REL(address) - sizeof(page_desc_t)) % page->type->paged_size);
 }
 
 void * pta_get_final_obj(void * address){
 	// void * bckdbg = address;
 	address = find_raw_refc(address);
-	while (PG_FLAG(PG_START(address), PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address) address = *(void **)address;
+	while ((locate_page_descriptor(address)->flags & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address) address = *(void **)address;
 	return address;
 }
 

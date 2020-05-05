@@ -84,6 +84,6 @@ uint8_t pta_get_flags(void * obj);
 void * pta_get_field(void * obj, array field_name);
 
 #define compute_paged_size(type) ((type)->object_size + GET_OFFSET_ZONE(type))
-#define compute_page_limit(type) (pta_sys_page_size - (type)->paged_size + 1) // located just after the last instance
+#define compute_page_limit(type) (page_size - (type)->paged_size + 1) // located just after the last instance
 
 #endif

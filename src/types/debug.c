@@ -166,7 +166,7 @@ void show_fields(void * obj, size_t recursion){
 	if (type->flags & TYPE_ARRAY){
 		array_part_t * array_part = obj;
 		printf("%0*s‣ content: ", recursion * 3, " ");
-		if (PG_TYPE(obj)->flags & TYPE_CHAR){
+		if (locate_page_descriptor(obj)->type->flags & TYPE_CHAR){
 			putchar('\"');
 			for (size_t i = 0; i < array_part->size; i++){
 				print_char(*(char *)pta_get_c_object(pta_array_get(array_part, i)));
@@ -206,7 +206,7 @@ void pta_show_pages(void * any_paged_address){
 			printf("Pages of a type with object_size = %li:\n", type->object_size);
 			page_list_t * type_pgl = pta_get_c_object(type->page_list);
 			while (type_pgl){
-				page_header_t * page = PG_START(type_pgl->first_instance);
+				page_desc_t * page = locate_page_descriptor(type_pgl->first_instance);
 				size_t instances = page_occupied_slots(type_pgl->first_instance, type);
 				if (page->type != type) printf("Error with the following page type:\n");
 				printf("%p :\n\tflags: %hhx\n\tinstances: %li\n", page, page->flags, instances);

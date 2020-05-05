@@ -75,7 +75,7 @@ typedef void (*pta_for_each_type_callback)(pta_obj type, void * arg);
 extern void pta_for_each_type(pta_type_t * root_type, pta_for_each_type_callback cb, void * arg);
 
 // page.h
-size_t pta_pages;
+extern size_t pta_pages;
 
 extern pta_obj pta_spot(pta_type_t * type);
 

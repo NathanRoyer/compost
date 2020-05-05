@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include "type.h"
 
-typedef PTA_STRUCT page_header page_header_t;
+typedef PTA_STRUCT page_desc page_desc_t;
 typedef PTA_STRUCT array_part array_part_t;
 typedef PTA_STRUCT page_list page_list_t;
 typedef PTA_STRUCT root_page root_page_t;
@@ -37,10 +37,10 @@ typedef PTA_STRUCT root_page root_page_t;
 #define PAGE_ARRAY     0b010
 #define PAGE_FAKE_PGLT 0b100
 
-typedef PTA_STRUCT page_header {
+typedef PTA_STRUCT page_desc {
 	type_t * type;
 	uint8_t flags;
-} page_header_t;
+} page_desc_t;
 
 typedef PTA_STRUCT array_part {
 	void * refc;
@@ -49,18 +49,27 @@ typedef PTA_STRUCT array_part {
 	array_part_t * next_part;
 } array_part_t;
 
-#define PG_START(addr) (void *)((size_t)addr & sys_page_mask)
-#define PG_TYPE(addr)  (((page_header_t *)PG_START(addr))->type)
-#define PG_REL(addr)   (((size_t)addr) & sys_page_rel_mask)
-#define PG_NEXT(page)  ((void *)page + pta_sys_page_size)
-#define PG_REFC(page)  ((void *)page + sizeof(page_header_t))
-#define PG_FLAGS(page) ((page_header_t *)page)->flags
-#define PG_FLAG(page, flag)   (PG_FLAGS(page) & flag)
+typedef union ptr ptr_t;
+typedef union ptr {
+	ptr_t * p;
+	size_t s;
+} ptr_t;
+#define SP(v) ((ptr_t){ .s = (v) })
+#define PP(v) ((ptr_t){ .p = (v) })
+#define PTR_BITS (sizeof(void *) * 8)
+
+#define PG_START(addr)      (void *)((size_t)addr & page_mask)
+#define PG_TYPE(addr)       --- dont use ---
+#define PG_REL(addr)        (((size_t)addr) & page_rel_mask)
+#define PG_NEXT(page)       ((void *)page + page_size)
+#define PG_REFC(page)       ((void *)page + sizeof(page_desc_t))
+#define PG_FLAGS(page)      --- dont use ---
+#define PG_FLAG(page, flag) --- dont use ---
 #define ARRAY_CONTENT_SIZE(array, type) (((array_part_t *)array)->size * (type->object_size + type->offsets))
 
-size_t pta_sys_page_size;
-size_t sys_page_rel_mask;
-size_t sys_page_mask;
+size_t page_size;
+size_t page_rel_mask;
+size_t page_mask;
 size_t pta_pages;
 
 typedef PTA_STRUCT page_list {
@@ -74,6 +83,8 @@ typedef PTA_STRUCT page_list {
  */
 #define array_next(array_part, type) (array_part_t *)((void *)(array_part) + sizeof(array_part_t) + ARRAY_CONTENT_SIZE((array_part), (type)) + ((array_part_t *)(array_part))->following_free_space)
 
+page_desc_t * locate_page_descriptor(void * address);
+
 void * new_page(type_t * type, uint8_t flags);
 
 void * pta_spot(type_t * type);
@@ -84,7 +95,7 @@ void * pta_spot_array(type_t * type, size_t size);
 
 void * pta_spot_array_dependent(void * destination, type_t * type, size_t size);
 
-bool array_has_next(array_part_t * array_part);
+bool array_has_next(array_part_t * array_part, type_t * type);
 
 size_t pta_array_length(array_part_t * array_part);
 
@@ -101,7 +112,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete);
 root_page_t * get_root_page(void * obj);
 
 typedef PTA_STRUCT root_page {
-	page_header_t header;
+	page_desc_t header;
 
 	refc_t rt_refc; // root type
 	type_t rt;

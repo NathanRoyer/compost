@@ -19,17 +19,141 @@
 
 #include "types/page.h"
 
-size_t pta_sys_page_size;
-size_t sys_page_rel_mask;
-size_t sys_page_mask;
-size_t pta_pages = 0;
+size_t page_size;
+size_t page_rel_mask;
+size_t page_mask;
+size_t pta_pages;
+size_t page_relative_bits;
+size_t reg_mask;
+size_t reg_i_mask;
+size_t reg_i_bits;
+size_t reg_md_mask;
+size_t reg_md_bits;
+size_t reg_part_bits;
+size_t reg_last_part_bits;
+ptr_t first_reg;
 
-// called automatically before main, to get pta_sys_page_size from the system cfg :
+ptr_t new_random_page(size_t contig_len);
+
+ptr_t get_reg_metadata(ptr_t reg);
+
+void set_reg_metadata(ptr_t reg, ptr_t metadata);
+
+// called automatically before main, to get page_size from the system cfg :
 __attribute__((constructor))
 void get_system_paging_config(){
-	pta_sys_page_size = sysconf(_SC_PAGE_SIZE);
-	sys_page_rel_mask = (size_t)(pta_sys_page_size - 1); // typically 0x00000fff
-	sys_page_mask = ~sys_page_rel_mask;                  // typically 0xfffff000
+	page_size = sysconf(_SC_PAGE_SIZE);
+	page_rel_mask = page_size - 1; // typically 0x...00000fff
+	page_mask = ~page_rel_mask;        // typically 0x...fffff000
+	for (page_relative_bits = 0; page_rel_mask >> page_relative_bits; page_relative_bits++);
+
+	reg_mask = (page_size / sizeof(void *)) - 1;
+	for (reg_part_bits = 0; reg_mask >> reg_part_bits; reg_part_bits++);
+	reg_last_part_bits = PTR_BITS - ((PTR_BITS - page_relative_bits) % reg_part_bits);
+	for (reg_i_bits = 0; (PTR_BITS - 1) >> reg_i_bits; reg_i_bits++);
+	if (reg_i_bits >= page_relative_bits){
+		printf("Critical error: This system\'s paging configuration is not compatible with LibPTA.\n");
+		exit(1);
+	}
+	reg_md_bits = page_relative_bits - reg_i_bits;
+	reg_i_mask = (1 << reg_i_bits) - 1;
+	reg_md_mask = (1 << reg_md_bits) - 1;
+	first_reg.s = (new_random_page(1).s);
+	set_reg_metadata(first_reg, first_reg);
+	first_reg.s |= page_relative_bits;
+}
+
+ptr_t new_random_page(size_t contig_len){
+	return PP(mmap(NULL, page_size * contig_len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+}
+
+/*
+ * Registers have some metadata scattered between
+ * "next" and 'i' bits. It represents the address
+ * which expectedly led the program to this part.
+ */
+ptr_t get_reg_metadata(ptr_t reg){
+	ptr_t metadata = SP(0);
+	// printf("get-md %p", reg.p);
+	for (size_t i = 0; i < PTR_BITS; i += reg_md_bits){
+		// get pointer content as size_t and advance the pointer
+		// right shift to skip the 'i' bits
+		// AND to keep only the relevant portion
+		// left shift to add at the correct portion of metadata
+		// printf("   get-md (i=%li) = %p\n", i, (reg.p->s >> reg_i_bits) & reg_md_mask);
+		metadata.s |= ((reg.p++->s >> reg_i_bits) & reg_md_mask) << i;
+	}
+	printf(" : %p\n", metadata.p);
+	return metadata;
+}
+
+void set_reg_metadata(ptr_t reg, ptr_t metadata){
+	// printf("set-md %p = %p\n", reg.p, metadata.p);
+	for (size_t i = 0; i < PTR_BITS; i += reg_md_bits){
+		// reverse operation
+		// printf("   set-md (i=%li) = 0x%x\n", i, (metadata.s >> i) & reg_md_mask);
+		reg.p++->s |= ((metadata.s >> i) & reg_md_mask) << reg_i_bits;
+	}
+}
+
+page_desc_t * locate_page_descriptor(void * address){
+	ptr_t reg = SP(first_reg.s & page_mask);
+	size_t i = first_reg.s & reg_i_mask;
+	while (reg.p != NULL){
+		reg = reg.p[(PP(address).s >> i) & reg_mask];
+		if (i <= page_relative_bits) break;
+		i = reg.s & reg_i_mask;
+		reg.s &= page_mask;
+	}
+	return (page_desc_t *)(reg.s & page_mask);
+}
+
+void create_page_descriptor(ptr_t address, page_desc_t * desc){
+	ptr_t * reg = &first_reg;
+	ptr_t reg_ct = first_reg;
+	size_t i = first_reg.s & reg_i_mask;
+	ptr_t last_md;
+	do {
+		i = reg_ct.s & reg_i_mask;
+		if (i > page_relative_bits){
+			size_t relevant_bits = ((~(size_t)0) >> i) << i;
+			last_md = get_reg_metadata(SP(reg_ct.s & page_mask));
+			if ((last_md.s & relevant_bits) == (address.s & relevant_bits)){
+				reg = &(SP((reg_ct.s & page_mask)).p)[(address.s >> i) & reg_mask];
+				reg_ct = *reg;
+			} else break;
+		} else break;
+	} while (reg_ct.p != NULL);
+
+	if (i > page_relative_bits){
+		printf("LibPTA : new register (%lu)\n", i);
+		if (reg_ct.p != NULL){
+			ptr_t bck = reg_ct;
+			ptr_t intermediate = new_random_page(1);
+			set_reg_metadata(intermediate, address);
+
+			for (i = reg_last_part_bits; i >= page_relative_bits; i -= reg_part_bits){
+				size_t relevant_bits = ((~(size_t)0) >> i) << i;
+				if ((last_md.s & relevant_bits) != (address.s & relevant_bits)) break;
+			}
+
+			reg->s &= (reg_md_mask << reg_i_bits);
+			reg->s |= (intermediate.s | i);
+			intermediate.p[(last_md.s >> i) & reg_mask].s |= bck.s;
+			reg = &(intermediate.p[(address.s >> i) & reg_mask]);
+		}
+
+		ptr_t final_reg_page = new_random_page(1);
+		set_reg_metadata(final_reg_page, address);
+
+		reg->s &= (reg_md_mask << reg_i_bits);
+		reg->s |= (final_reg_page.s | page_relative_bits);
+		reg = &(final_reg_page.p[(address.s >> page_relative_bits) & reg_mask]);
+	} else {
+		reg = &(SP((reg_ct.s & page_mask)).p)[(address.s >> page_relative_bits) & reg_mask];
+	}
+	reg->s &= (reg_md_mask << reg_i_bits);
+	reg->s |= (size_t)desc;
 }
 
 /* new_page (type_t pointer type, 8-bit flags)
@@ -40,14 +164,8 @@ void get_system_paging_config(){
  * Return value: The page address, SYS_PAGE_SIZE aligned.
  */
 void * new_page(type_t * type, uint8_t flags){
-	page_header_t * page = mmap(
-		NULL,							// any address
-		pta_sys_page_size,				// 1 page
-		PROT_READ | PROT_WRITE,			// RW, no exec
-		MAP_PRIVATE | MAP_ANONYMOUS,	// not file-backed
-		-1,								// not file-backed
-		0								// no offset
-	);
+	page_desc_t * page = (page_desc_t *)(new_random_page(1).p);
+	create_page_descriptor(PP((void *)page), page);
 	pta_pages++;
 
 	// pta_increment_refc(type);
@@ -58,11 +176,7 @@ void * new_page(type_t * type, uint8_t flags){
 		array_part_t * array_part = PG_REFC(page);
 		*array_part = (array_part_t){ NULL, 0, 0, NULL };
 		array_part->size = 0;
-		array_part->following_free_space = pta_sys_page_size - sizeof(page_header_t) - sizeof(array_part_t)/* - 0 */;
-	} else {
-		for (void * refc = PG_REFC(page); PG_REL(refc) < type->page_limit; refc += type->paged_size){
-			*(void **)refc = NULL;
-		}
+		array_part->following_free_space = page_size - sizeof(page_desc_t) - sizeof(array_part_t)/* - 0 */;
 	}
 
 	return page;
@@ -96,14 +210,14 @@ void * spot_internal(type_t * type, uint8_t flags){
 		} else {
 			pgl = pta_get_c_object(*pgl_obj_p);
 			void * pg_refc = pgl->first_instance;
-			if (flags == PG_FLAGS(PG_START(pg_refc))){
+			if (flags == locate_page_descriptor(pg_refc)->flags){
 				for (void * refc = pg_refc; PG_REL(refc) < type->page_limit; ){
 					if (!is_obj_referenced(refc)){
 						reset_fields(refc, type);
 						return refc;
 					}
 					if (flags & PAGE_ARRAY){
-						if (!array_has_next(refc)) break;
+						if (!array_has_next(refc, type)) break;
 						refc = array_next(refc, type);
 					} else refc += type->paged_size;
 				}
@@ -135,8 +249,8 @@ void * pta_spot_dependent(void * destination, type_t * type){
 /* array_has_next (private function)
  *
  */
-bool array_has_next(array_part_t * array_part){
-	return (void *)array_next(array_part, PG_TYPE(array_part)) + sizeof(array_part_t) < PG_NEXT(PG_START(array_part));
+bool array_has_next(array_part_t * array_part, type_t * type){
+	return (void *)array_next(array_part, type) + sizeof(array_part_t) < PG_NEXT(PG_START(array_part));
 }
 
 /* grow_array (private function)
@@ -149,7 +263,7 @@ bool array_has_next(array_part_t * array_part){
  */
 void grow_array(array_part_t * array_part, type_t * type, size_t content_size){
 	array_part_t * next_part = array_part;
-	while (array_has_next(next_part)){
+	while (array_has_next(next_part, type)){
 		next_part = array_next(next_part, type);
 		if (is_obj_referenced(next_part)) break;
 		array_part->following_free_space += sizeof(array_part_t) + ARRAY_CONTENT_SIZE(next_part, type) + next_part->following_free_space;
@@ -209,7 +323,7 @@ size_t pta_array_length(array_part_t * array_part){
  * Return value: none
  */
 void pta_resize_array(array_part_t * array_part, size_t length){
-	page_header_t * page = PG_START(array_part);
+	page_desc_t * page = locate_page_descriptor(array_part);
 	type_t * type = page->type;
 	size_t content_size = type->object_size + type->offsets;
 	size_t current_length = pta_array_length(array_part);
@@ -295,13 +409,13 @@ void * pta_array_get(array_part_t * array_part, size_t index){
 		index -= array_part->size;
 		array_part = array_part->next_part;
 	}
-	type_t * type = PG_TYPE(array_part);
+	type_t * type = locate_page_descriptor(array_part)->type;
 	return (void *)array_part + sizeof(array_part_t) + (index * (type->object_size + type->offsets));
 }
 
 size_t pta_array_find(array_part_t * array_part, void * item){
 	size_t index = 0;
-	type_t * type = PG_TYPE(array_part);
+	type_t * type = locate_page_descriptor(array_part)->type;
 	void * low_boundary;
 	while (true){
 		void * high_boundary = array_next(array_part, type);
@@ -323,11 +437,11 @@ size_t pta_array_find(array_part_t * array_part, void * item){
  */
 size_t page_occupied_slots(void * first_instance, type_t * type){
 	size_t n = 0;
-	uint8_t flags = PG_FLAGS(PG_START(first_instance));
+	uint8_t flags = locate_page_descriptor(first_instance)->flags;
 	for (void * refc = first_instance; PG_REL(refc) < type->page_limit;){
 		n += is_obj_referenced(refc);
 		if (flags & PAGE_ARRAY){
-			if (!array_has_next(refc)) break;
+			if (!array_has_next(refc, type)) break;
 			refc = array_next(refc, type);
 		} else refc += type->paged_size;
 	}
@@ -348,7 +462,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 	if (pl_obj != NULL){
 		page_list_t * pl = pta_get_c_object(pl_obj);
 		void * next_obj = update_page_list(pl->next, type, should_delete);
-		uint8_t flags = PG_FLAGS(PG_START(pl->first_instance));
+		uint8_t flags = locate_page_descriptor(pl->first_instance)->flags;
 
 		if (should_delete && page_occupied_slots(pl->first_instance, type) == 0){
 			if (type->flags & TYPE_MALLOC_F){
@@ -360,7 +474,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 							void * mallocd_addr = *(void **)(refc + offset + i);
 							if (mallocd_addr != NULL) free(mallocd_addr);
 							if (flags & PAGE_ARRAY){
-								if (!array_has_next(refc)) break;
+								if (!array_has_next(refc, type)) break;
 								refc = array_next(refc, type);
 							} else refc += type->paged_size;
 						}
@@ -370,7 +484,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 			// second gc iteration
 			// pta_decrement_refc(type);
 			pta_pages--;
-			munmap((void *)PG_START(pl->first_instance), pta_sys_page_size);
+			munmap((void *)PG_START(pl->first_instance), page_size);
 			// *find_raw_refc(pl_obj) = NULL; // reset refc
 			// TODO : when pages are deleted, the child page has a bad refc !
 			pl_obj = next_obj;
@@ -380,7 +494,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 			for (void * refc = pl->first_instance; PG_REL(refc) < type->page_limit;){
 				if (*(void **)refc != NULL && (!is_obj_referenced(refc))) *(void **)refc = NULL;
 				if (flags & PAGE_ARRAY){
-					if (!array_has_next(refc)) break;
+					if (!array_has_next(refc, type)) break;
 					refc = array_next(refc, type);
 				} else refc += type->paged_size;
 			}
@@ -390,7 +504,7 @@ void * update_page_list(void * pl_obj, type_t * type, bool should_delete){
 }
 
 root_page_t * get_root_page(void * obj){
-	page_header_t * page = PG_START(obj); // getting any type
-	page = PG_START(page->type); // getting the root type
-	return (void *)((size_t)(page->type) & sys_page_mask); // getting the root page
+	page_desc_t * page = locate_page_descriptor(obj); // getting any type
+	page = locate_page_descriptor(page->type); // getting the root type
+	return (void *)((size_t)page->type & page_mask); // getting the root page
 }
