@@ -20,6 +20,7 @@
 #include "types/debug.c"
 #include "types/dict.c"
 #include "types/field.c"
+#include "types/descriptor.c"
 #include "types/page.c"
 #include "types/refc.c"
 #include "types/type.c"

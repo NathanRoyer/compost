@@ -152,6 +152,8 @@ int main(int argc, char *argv[]){
 			printf("show VARIABLE        show a variable in its page\n");
 			printf("new TYPE VARIABLE    create a new instance of a type\n");
 			printf("type NEW_TYPE        create a new type\n");
+		} else if (CMD("pages")){
+			printf("%lu pages\n", pta_pages);
 		} else if (!CMD("")) printf("Unknown command: \"%s\".\n", cmd);
 		free(cmd);
 	}

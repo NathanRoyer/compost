@@ -1,5 +1,5 @@
 /*
- * LibPTA dictionnary features, C source
+ * LibPTA dictionary features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,8 +20,8 @@
 #include "types/dict.h"
 
 /*
- * This file contains dictionnary-related functions
- *
+ * This file contains dictionary-related functions
+ * It is pretty high-level in comparison to the rest of LibPTA's source
  */
 
 #define IS_DICT_EMPTY(d) (d->first_block == NULL && d->empty_key_v == NULL)

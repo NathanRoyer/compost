@@ -35,7 +35,9 @@ void ** find_raw_refc(void * address){
 void * pta_get_final_obj(void * address){
 	// void * bckdbg = address;
 	address = find_raw_refc(address);
-	while ((locate_page_descriptor(address)->flags & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address) address = *(void **)address;
+	while ((locate_page_descriptor(address)->flags & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address){
+		address = *(void **)address;
+	}
 	return address;
 }
 
