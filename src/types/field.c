@@ -27,12 +27,12 @@ typedef struct obj_info {
 } obj_info_t;
 
 obj_info_t get_info(void * obj){
-	page_desc_t * page = locate_page_descriptor(obj);
+	page_desc_t * desc = get_page_descriptor(obj);
+	type_t * type = PG_TYPE2(desc);
 	size_t offset;
-	if (page->flags & PAGE_ARRAY){
-		array_part_t * array_part = PG_REFC(page), * next_ap;
-		while (true){
-			next_ap = array_next(array_part, page->type);
+	if (PG_FLAGS(desc) & PAGE_ARRAY){
+		array_part_t * array_part = PG_REFC2(desc), * next_ap;
+		while ((next_ap = array_part->next) != NULL){
 			if (obj < (void *)next_ap) break;
 			else array_part = next_ap;
 		}
@@ -41,19 +41,19 @@ obj_info_t get_info(void * obj){
 			 obj_info_t info = {
 				0,
 				(size_t)obj - (size_t)array_part,
-				&(get_root_page(page->type)->art), 
-				page->flags
+				&(get_root_page(type)->art), 
+				PG_FLAGS(desc)
 			};
 			info.offsets_zone = GET_OFFSET_ZONE(info.page_type);
 			return info;
 		} else {
 			offset = obj - ((void *)array_part + sizeof(array_part_t));
-			offset %= page->type->object_size + page->type->offsets;
+			offset %= type->object_size + type->offsets;
 		}
-	} else offset = (PG_REL(obj - sizeof(page_desc_t))) % page->type->paged_size;
+	} else offset = (PP(obj).s - PP(desc + 1).s) % type->paged_size;
 	return (obj_info_t){
-		(page->flags & PAGE_ARRAY) ? page->type->offsets : GET_OFFSET_ZONE(page->type),
-		offset, page->type, page->flags
+		(PG_FLAGS(desc) & PAGE_ARRAY) ? type->offsets : GET_OFFSET_ZONE(type),
+		offset, type, PG_FLAGS(desc)
 	};
 }
 
@@ -248,12 +248,11 @@ void check_references(void ** refc, recursive_call_t * rec){
 	}
 }
 
-void reset_fields(void * refc, type_t * type){
-	size_t offset = type->paged_size - type->object_size;
+void reset_fields(void * c_object, type_t * type){
 	for (size_t i = 0; i < type->object_size; i++){
 		field_info_b_t * fib = GET_FIB(type, i);
-		void * field = refc + (offset + i);
-		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(refc, field);
+		void * field = c_object + i;
+		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(c_object, field);
 		else if ((fib->flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 			*(void **)field = NULL;
@@ -297,7 +296,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 	*(dict_t *)pta_get_c_object(stat_f) = (dict_t){ NULL, NULL };
 
 	new_type->paged_size = compute_paged_size(new_type);
-	new_type->page_limit = compute_page_limit(new_type);
+	new_type->allocation = 1;
 
 	for (size_t i = 0; i < offsets; i++){
 		*GET_FIA(new_type, i) = (field_info_a_t){ NULL, 0 };

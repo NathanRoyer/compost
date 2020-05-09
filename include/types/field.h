@@ -71,7 +71,7 @@ void pta_clear_reference(void * field);
 
 void check_references(void ** refc, recursive_call_t * rec);
 
-void reset_fields(void * refc, type_t * type);
+void reset_fields(void * c_object, type_t * type);
 
 void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags);
 

@@ -166,16 +166,16 @@ void show_fields(void * obj, size_t recursion){
 	if (type->flags & TYPE_ARRAY){
 		array_part_t * array_part = obj;
 		printf("%0*s‣ content: ", recursion * 3, " ");
-		if (locate_page_descriptor(obj)->type->flags & TYPE_CHAR){
+		if (PG_TYPE2(get_page_descriptor(obj))->flags & TYPE_CHAR){
 			putchar('\"');
-			for (size_t i = 0; i < array_part->size; i++){
+			for (size_t i = 0; i < array_part->capacity; i++){
 				print_char(*(char *)pta_get_c_object(pta_array_get(array_part, i)));
 			}
 			printf("\"\n");
 		} else {
 			putchar('\n');
 			recursion++;
-			for (size_t i = 0; i < array_part->size; i++){
+			for (size_t i = 0; i < array_part->capacity; i++){
 				printf("%0*s• [%li]", recursion * 3, " ", i);
 				show_fields(pta_array_get(array_part, i), recursion + 1);
 			}
@@ -198,22 +198,21 @@ void pta_show_references(void * obj){
 
 void pta_show_pages(void * any_paged_address){
 	root_page_t * rp = get_root_page(any_paged_address);
-	page_list_t * pgl = pta_get_c_object(rp->rt.page_list);
-	while (pgl){
-		for (void * refc = pgl->first_instance; PG_REL(refc) < rp->rt.page_limit; refc += rp->rt.paged_size){
+	page_desc_t * desc = rp->rt.page_list;
+	while (desc){
+		for (void * refc = PG_REFC2(desc); PP(refc).s < PG_LIMIT(desc, &rp->rt); refc += rp->rt.paged_size){
 			if (*(void **)refc == NULL) continue;
 			type_t * type = pta_get_c_object(refc);
 			printf("Pages of a type with object_size = %li:\n", type->object_size);
-			page_list_t * type_pgl = pta_get_c_object(type->page_list);
-			while (type_pgl){
-				page_desc_t * page = locate_page_descriptor(type_pgl->first_instance);
-				size_t instances = page_occupied_slots(type_pgl->first_instance, type);
-				if (page->type != type) printf("Error with the following page type:\n");
-				printf("%p :\n\tflags: %hhx\n\tinstances: %li\n", page, page->flags, instances);
-				type_pgl = pta_get_c_object(type_pgl->next);
+			page_desc_t * page = type->page_list;
+			while (page){
+				size_t instances = page_occupied_slots(PG_LIMIT(page, PG_TYPE2(page)), PG_FLAGS(page), PG_REFC2(page), type);
+				if (PG_TYPE2(page) != type) printf("Error with the following page type:\n");
+				printf("%p :\n\tflags: %hhx\n\tinstances: %lu\n", page, PG_FLAGS(page), instances);
+				page = PG_NEXT(page);
 			}
 
 		}
-		pgl = pta_get_c_object(pgl->next);
+		desc = PG_NEXT(desc);
 	}
 }

@@ -32,6 +32,8 @@ size_t reg_md_bits;
 size_t reg_part_bits;
 size_t reg_last_part_bits;
 
+ptr_t first_pgd_page = PP(NULL);
+
 // called by the constructor in page.c
 void compute_regs_config(){
 	for (page_relative_bits = 0; page_rel_mask >> page_relative_bits; page_relative_bits++);
@@ -84,7 +86,7 @@ void set_reg_metadata(ptr_t reg, ptr_t metadata){
 	}
 }
 
-page_desc_t * locate_page_descriptor(void * address){
+page_desc_t * get_page_descriptor(void * address){
 	ptr_t reg = SP(first_reg.s & page_mask);
 	size_t i = first_reg.s & reg_i_mask;
 	while (reg.p != NULL){
@@ -96,7 +98,7 @@ page_desc_t * locate_page_descriptor(void * address){
 	return (page_desc_t *)(reg.s & page_mask);
 }
 
-void create_page_descriptor(ptr_t address, page_desc_t * desc){
+void set_page_descriptor(ptr_t address, page_desc_t * desc){
 	ptr_t * reg = &first_reg;
 	ptr_t reg_ct = first_reg;
 	size_t i = first_reg.s & reg_i_mask;
@@ -141,4 +143,12 @@ void create_page_descriptor(ptr_t address, page_desc_t * desc){
 		reg = &(SP((reg_ct.s & page_mask)).p)[(address.s >> page_relative_bits) & reg_mask];
 	}
 	reg->s = (size_t)desc;
+}
+
+void prepare_page_desc(page_desc_t * desc, type_t * type, void * next, size_t contig_len, uint8_t flags){
+	desc->type = PP(type);
+	desc->next = PP(next);
+	desc->flags_and_limit = PP(desc);
+	desc->flags_and_limit.s += page_size * contig_len;
+	desc->flags_and_limit.s |= flags;
 }

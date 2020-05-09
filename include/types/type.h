@@ -34,6 +34,18 @@ typedef PTA_STRUCT {
 #define const_array(s) ((array){ sizeof(s) - 1, s })
 #define char_at(key, i) (((char *)key.data)[i])
 
+// this helps a lot for pointer arithmetics:
+typedef union ptr ptr_t;
+typedef union ptr {
+	ptr_t * p;
+	size_t s;
+} ptr_t;
+#define SP(v) ((ptr_t){ .s = (size_t)(v) })
+#define PP(v) ((ptr_t){ .p = (ptr_t *)(v) })
+#define PTR_BITS (sizeof(void *) * 8)
+
+#define CEILDIV(a, b) ((a / b) + ((a % b) != 0))
+
 #define TYPE_BASIC     0b0000000
 #define TYPE_PRIMITIVE 0b0000001
 #define TYPE_INTERNAL  0b0000010
@@ -48,12 +60,12 @@ typedef PTA_STRUCT {
 #define GET_OFFSET_ZONE(type) ((type)->offsets > sizeof(void *) ? (type)->offsets : sizeof(void *))
 
 typedef PTA_STRUCT type {
-	void * dfia; // field offsets
-	void * dfib; // real fields
-	size_t object_size;
-	size_t offsets;
-	size_t paged_size;
-	size_t page_limit;
+	void * dfia;           // field offsets
+	void * dfib;           // real fields
+	size_t object_size;    // unavoidable
+	size_t offsets;        // unavoidable
+	size_t paged_size;     // avoidable
+	size_t allocation;     // how many pages to allocate at once
 	void * dynamic_fields; // name -> offset
 	void * static_fields;  // name -> pointer
 	void * page_list;

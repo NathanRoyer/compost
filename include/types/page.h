@@ -25,51 +25,29 @@
 #include "type.h"
 
 typedef PTA_STRUCT array_part array_part_t;
-typedef PTA_STRUCT page_list page_list_t;
 typedef PTA_STRUCT root_page root_page_t;
 
 #include "refc.h"
 #include "field.h"
 #include "descriptor.h"
 
-#define PAGE_BASIC     0b000
-#define PAGE_DEPENDENT 0b001
-#define PAGE_ARRAY     0b010
-#define PAGE_FAKE_PGLT 0b100
-
 typedef PTA_STRUCT array_part {
 	void * refc;
-	size_t size;
-	size_t following_free_space;
-	array_part_t * next_part;
+	size_t capacity;
+	array_part_t * next;
 } array_part_t;
-
-#define PG_START(addr)      (void *)((size_t)addr & page_mask)
-#define PG_TYPE(addr)       --- dont use ---
-#define PG_REL(addr)        (((size_t)addr) & page_rel_mask)
-#define PG_NEXT(page)       ((void *)page + page_size)
-#define PG_REFC(page)       ((void *)page + sizeof(page_desc_t))
-#define PG_FLAGS(page)      --- dont use ---
-#define PG_FLAG(page, flag) --- dont use ---
-#define ARRAY_CONTENT_SIZE(array, type) (((array_part_t *)array)->size * (type->object_size + type->offsets))
 
 size_t page_size;
 size_t page_rel_mask;
 size_t page_mask;
 size_t pta_pages;
 
-typedef PTA_STRUCT page_list {
-	void * next;
-	void * first_instance;
-} page_list_t;
-
-/* MACRO array_next (array part pointer)
- *
- * Return value: the next array in page, no matter if it is referenced.
- */
-#define array_next(array_part, type) (array_part_t *)((void *)(array_part) + sizeof(array_part_t) + ARRAY_CONTENT_SIZE((array_part), (type)) + ((array_part_t *)(array_part))->following_free_space)
-
-void * new_page(type_t * type, uint8_t flags);
+#define PG_REFC2(desc) ((void *)(PP(desc).s + sizeof(page_desc_t)))
+#define PG_TYPE2(desc) ((type_t *)((desc)->type.p))
+#define PG_NEXT(desc)  ((page_desc_t *)((desc)->next.p))
+#define PG_FLAGS(desc) ((desc)->flags_and_limit.s & page_rel_mask)
+#define PG_RAW_LIMIT(desc) ((desc)->flags_and_limit.s & page_mask)
+#define PG_LIMIT(desc, type) (PG_RAW_LIMIT(desc) - (type)->paged_size + 1)
 
 void * pta_spot(type_t * type);
 
@@ -79,19 +57,19 @@ void * pta_spot_array(type_t * type, size_t size);
 
 void * pta_spot_array_dependent(void * destination, type_t * type, size_t size);
 
-bool array_has_next(array_part_t * array_part, type_t * type);
+void grow_array(page_desc_t * desc, array_part_t * array_part, type_t * type);
 
-size_t pta_array_length(array_part_t * array_part);
+void shrink_array(page_desc_t * desc, array_part_t * array_part, type_t * type, size_t array_capacity);
 
-void pta_resize_array(array_part_t * array_part, size_t length);
+size_t pta_array_capacity(array_part_t * array_part);
 
 void * pta_array_get(array_part_t * array_part, size_t index);
 
 size_t pta_array_find(array_part_t * array_part, void * item);
 
-size_t page_occupied_slots(void * pg_refc, type_t * type);
+size_t page_occupied_slots(size_t pg_limit, uint8_t flags, void * first_instance, type_t * type);
 
-void * update_page_list(void * pl_obj, type_t * type, bool should_delete);
+page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_delete);
 
 root_page_t * get_root_page(void * obj);
 
@@ -112,9 +90,6 @@ typedef PTA_STRUCT root_page {
 
 	refc_t fibt_refc; // field info b type
 	type_t fibt;
-
-	refc_t pglt_refc; // page list type
-	type_t pglt;
 
 	refc_t dht_refc; // dict header type
 	type_t dht;

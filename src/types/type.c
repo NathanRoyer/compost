@@ -54,9 +54,6 @@
 // 	refc_t fibt_refc; // field info b type
 // 	type_t fibt;
 
-// 	refc_t pglt_refc; // page list type
-// 	type_t pglt;
-
 // 	refc_t dht_refc; // dict header type
 // 	type_t dht;
 
@@ -77,7 +74,6 @@ typedef PTA_STRUCT f_info_a_page {
 	array_part_t chrt_fia_ap; // size = 0
 	array_part_t fiat_fia_ap; // size = 0
 	array_part_t fibt_fia_ap; // size = 0
-	array_part_t pglt_fia_ap; // size = 0
 	array_part_t dht_fia_ap; // size = 0
 	array_part_t dbt_fia_ap; // size = 0
 	array_part_t art_fia_ap; // size = 0
@@ -134,12 +130,6 @@ typedef PTA_STRUCT f_info_b_page {
 	fib_o_t fibt_ft   [8]; // field_type
 	fib_o_t fibt_flags[1]; // flags
 
-	// page list
-	array_part_t pglt_fib_ap; // size = 16
-
-	fib_o_t pglt_next[8]; // field_type
-	fib_o_t pglt_fi  [8]; // data_offset
-
 	// dict header
 	array_part_t dht_fib_ap; // size = 24
 
@@ -157,32 +147,13 @@ typedef PTA_STRUCT f_info_b_page {
 	fib_o_t dbt_pown[8]; // value.prev_owner
 
 	// array
-	array_part_t art_fib_ap; // size = 24
+	array_part_t art_fib_ap; // size = 16
 
-	fib_o_t art_sz  [8]; // size
-	fib_o_t art_ffsp[8]; // following_free_space
-	fib_o_t art_next[8]; // next_part
+	fib_o_t art_cap [8]; // capacity
+	fib_o_t art_next[8]; // next
 
 	array_part_t free;
 } f_info_b_page_t;
-
-typedef PTA_STRUCT refc_pgl {
-	refc_t refc;
-	void * next;
-	void * first_instance;
-} refc_pgl_t;
-
-typedef PTA_STRUCT page_list_page {
-	page_desc_t header;
-
-	refc_pgl_t rt_p;
-	refc_pgl_t fiat_p;
-	refc_pgl_t fibt_p;
-	refc_pgl_t pglt_p;
-	refc_pgl_t dht_p;
-
-	refc_t free;
-} page_list_page_t;
 
 typedef PTA_STRUCT type_dicts {
 	refc_t df_refc;
@@ -206,8 +177,6 @@ typedef PTA_STRUCT dict_header_page {
 
 	type_dicts_t fibt;
 
-	type_dicts_t pglt;
-
 	type_dicts_t dht;
 
 	type_dicts_t dbt;
@@ -220,170 +189,144 @@ typedef PTA_STRUCT dict_header_page {
 context_t pta_setup(){
 	pta_pages = 5;
 	root_page_t * rp = mmap(NULL, pta_pages * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	f_info_a_page_t * fiap = PG_NEXT(rp);
-	f_info_b_page_t * fibp = PG_NEXT(fiap);
-	page_list_page_t * pglp = PG_NEXT(fibp);
-	dict_header_page_t * dhp = PG_NEXT(pglp);
+	f_info_a_page_t    * fiap = (f_info_a_page_t    *)(PP(rp).s   + page_size);
+	f_info_b_page_t    * fibp = (f_info_b_page_t    *)(PP(fiap).s + page_size);
+	dict_header_page_t * dhp  = (dict_header_page_t *)(PP(fibp).s + page_size);
 
-	create_page_descriptor(PP((void *)rp),   &rp->header);
-	create_page_descriptor(PP((void *)fiap), &fiap->header);
-	create_page_descriptor(PP((void *)fibp), &fibp->header);
-	create_page_descriptor(PP((void *)pglp), &pglp->header);
-	create_page_descriptor(PP((void *)dhp),  &dhp->header);
+	set_page_descriptor(PP((void *)rp),   &rp->header);
+	set_page_descriptor(PP((void *)fiap), &fiap->header);
+	set_page_descriptor(PP((void *)fibp), &fibp->header);
+	set_page_descriptor(PP((void *)dhp),  &dhp->header);
 
 	// ROOT TYPE PAGE
 	if (true){
-		rp->header = (page_desc_t){ &rp->rt, PAGE_BASIC };
-
 		// ROOT TYPE
 		rp->rt_refc = &rp->rt_refc;
 		rp->rt = (type_t){
 			&fiap->rt_fia_ap, &fibp->rt_fib_ap,
 			sizeof(type_t), 1, // own offset--------------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->rt.df_refc, &dhp->rt.sf_refc,
-			&pglp->rt_p, NULL,
+			rp, NULL,
 			TYPE_INTERNAL | TYPE_ROOT
 		};
 		rp->rt.paged_size = compute_paged_size((&rp->rt));
-		rp->rt.page_limit = compute_page_limit((&rp->rt));
+
+		prepare_page_desc((page_desc_t *)rp, &rp->rt, NULL, 1, PAGE_BASIC);
 
 		// SIZE TYPE
 		rp->szt_refc = &rp->szt_refc;
 		rp->szt = (type_t){
 			&fiap->szt_fia_ap, &fibp->szt_fib_ap,
 			sizeof(size_t), 0, // own offsets -------------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->szt.df_refc, &dhp->szt.sf_refc,
 			NULL, NULL, // no pages
 			TYPE_PRIMITIVE | TYPE_INTERNAL
 		};
 		rp->szt.paged_size = compute_paged_size((&rp->szt));
-		rp->szt.page_limit = compute_page_limit((&rp->szt));
 
 		// CHAR TYPE
 		rp->chrt_refc = &rp->chrt_refc;
 		rp->chrt = (type_t){
 			&fiap->chrt_fia_ap, &fibp->chrt_fib_ap,
 			sizeof(uint8_t), 0, // own offsets -------------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->chrt.df_refc, &dhp->chrt.sf_refc,
 			NULL, NULL, // no pages
 			TYPE_PRIMITIVE | TYPE_INTERNAL | TYPE_CHAR
 		};
 		rp->chrt.paged_size = compute_paged_size((&rp->chrt));
-		rp->chrt.page_limit = compute_page_limit((&rp->chrt));
 
 		// FIAT TYPE
 		rp->fiat_refc = &rp->fiat_refc;
 		rp->fiat = (type_t){
 			&fiap->fiat_fia_ap, &fibp->fiat_fib_ap,
 			sizeof(field_info_a_t), 1, // own offset--------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->fiat.df_refc, &dhp->fiat.sf_refc,
-			&pglp->fiat_p, NULL,
+			fiap, NULL,
 			TYPE_INTERNAL
 		};
 		rp->fiat.paged_size = compute_paged_size((&rp->fiat));
-		rp->fiat.page_limit = compute_page_limit((&rp->fiat));
+
+		prepare_page_desc((page_desc_t *)fiap, &rp->fiat, NULL, 1, PAGE_ARRAY | PAGE_DEPENDENT);
 
 		// FIBT TYPE
 		rp->fibt_refc = &rp->fibt_refc;
 		rp->fibt = (type_t){
 			&fiap->fibt_fia_ap, &fibp->fibt_fib_ap,
 			sizeof(field_info_b_t), 1, // own offset--------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->fibt.df_refc, &dhp->fibt.sf_refc,
-			&pglp->fibt_p, NULL,
+			fibp, NULL,
 			TYPE_INTERNAL | TYPE_FIB
 		};
 		rp->fibt.paged_size = compute_paged_size((&rp->fibt));
-		rp->fibt.page_limit = compute_page_limit((&rp->fibt));
 
-		// PGL TYPE
-		rp->pglt_refc = &rp->pglt_refc;
-		rp->pglt = (type_t){
-			&fiap->pglt_fia_ap, &fibp->pglt_fib_ap,
-			sizeof(page_list_t), 1, // own offset------------------------ TO WATCH
-			0, 0, // computations later done
-			&dhp->pglt.df_refc, &dhp->pglt.sf_refc,
-			&pglp->pglt_p, NULL,
-			TYPE_INTERNAL
-		};
-		rp->pglt.paged_size = compute_paged_size((&rp->pglt));
-		rp->pglt.page_limit = compute_page_limit((&rp->pglt));
+		prepare_page_desc((page_desc_t *)fibp, &rp->fibt, NULL, 1, PAGE_ARRAY | PAGE_DEPENDENT);
 
 		// DHT TYPE
 		rp->dht_refc = &rp->dht_refc;
 		rp->dht = (type_t){
 			&fiap->dht_fia_ap, &fibp->dht_fib_ap,
 			sizeof(dict_t) + sizeof(void *) /* pown */, 1, // own offset---------------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->dht.df_refc, &dhp->dht.sf_refc,
-			&pglp->dht_p, NULL,
+			dhp, NULL,
 			TYPE_INTERNAL
 		};
 		rp->dht.paged_size = compute_paged_size((&rp->dht));
-		rp->dht.page_limit = compute_page_limit((&rp->dht));
+
+		prepare_page_desc((page_desc_t *)dhp, &rp->dht, NULL, 1, PAGE_DEPENDENT);
 
 		// DBT TYPE
 		rp->dbt_refc = &rp->dbt_refc;
 		rp->dbt = (type_t){
 			&fiap->dbt_fia_ap, &fibp->dbt_fib_ap,
 			sizeof(dict_block_t) + sizeof(void *) /* pown */, 1, // own offset---------------------- TO WATCH
-			0, 0, // computations later done
+			0, 1, // computations later done
 			&dhp->dbt.df_refc, &dhp->dbt.sf_refc,
 			NULL, NULL, // no page yet
 			TYPE_INTERNAL
 		};
 		rp->dbt.paged_size = compute_paged_size((&rp->dbt));
-		rp->dbt.page_limit = compute_page_limit((&rp->dbt));
 
 		// ARRAY TYPE
 		rp->art_refc = &rp->art_refc;
 		rp->art = (type_t){
 			&fiap->art_fia_ap, &fibp->art_fib_ap,
-			24, 1, // own offset---------------------- TO WATCH
-			0, 0, // computations later done
+			16, 1, // own offset---------------------- TO WATCH
+			0, 1, // computations later done
 			&dhp->art.df_refc, &dhp->art.sf_refc,
 			NULL, NULL, // no page yet
 			TYPE_INTERNAL | TYPE_ARRAY
 		};
 		rp->art.paged_size = compute_paged_size((&rp->art));
-		rp->art.page_limit = compute_page_limit((&rp->art));
-
-		for (void * refc = &rp->free; PG_REL(refc) < rp->rt.page_limit; refc += rp->rt.paged_size){
-			*(void **)refc = NULL;
-		}
 	}
 	// FIA PAGE
 	if (true){
-		fiap->header = (page_desc_t){ &rp->fiat, PAGE_DEPENDENT | PAGE_ARRAY };
-
 		// refc, size, following free space, next part
 
-		fiap->rt_fia_ap = (array_part_t){ &rp->rt_refc, 0, 0, NULL };
-		fiap->szt_fia_ap = (array_part_t){ &rp->szt_refc, 0, 0, NULL };
-		fiap->chrt_fia_ap = (array_part_t){ &rp->chrt_refc, 0, 0, NULL };
-		fiap->fiat_fia_ap = (array_part_t){ &rp->fiat_refc, 0, 0, NULL };
-		fiap->fibt_fia_ap = (array_part_t){ &rp->fibt_refc, 0, 0, NULL };
-		fiap->pglt_fia_ap = (array_part_t){ &rp->pglt_refc, 0, 0, NULL };
-		fiap->dht_fia_ap = (array_part_t){ &rp->dht_refc, 0, 0, NULL };
-		fiap->dbt_fia_ap = (array_part_t){ &rp->dbt_refc, 0, 0, NULL };
-		fiap->art_fia_ap = (array_part_t){ &rp->art_refc, 0, 0, NULL };
+		fiap->rt_fia_ap = (array_part_t){ &rp->rt_refc, 0, &fiap->szt_fia_ap };
+		fiap->szt_fia_ap = (array_part_t){ &rp->szt_refc, 0, &fiap->chrt_fia_ap };
+		fiap->chrt_fia_ap = (array_part_t){ &rp->chrt_refc, 0, &fiap->fiat_fia_ap };
+		fiap->fiat_fia_ap = (array_part_t){ &rp->fiat_refc, 0, &fiap->fibt_fia_ap };
+		fiap->fibt_fia_ap = (array_part_t){ &rp->fibt_refc, 0, &fiap->dht_fia_ap };
+		fiap->dht_fia_ap = (array_part_t){ &rp->dht_refc, 0, &fiap->dbt_fia_ap };
+		fiap->dbt_fia_ap = (array_part_t){ &rp->dbt_refc, 0, &fiap->art_fia_ap };
+		fiap->art_fia_ap = (array_part_t){ &rp->art_refc, 0, NULL };
 
-		fiap->free = (array_part_t){ NULL, 0, page_size - PG_REL((&fiap->free)) - sizeof(array_part_t), NULL };
+		fiap->free = (array_part_t){ NULL, 0, NULL };
 	}
 	// FIB PAGE
 	if (true){
-		fibp->header = (page_desc_t){ &rp->fibt, PAGE_DEPENDENT | PAGE_ARRAY };
-
 		// refc, size, following free space, next part
 		// field_type, pointer_to_dependent
 		field_info_b_t goback = { GO_BACK, FIBF_BASIC };
 
 		// ROOT TYPE
-		fibp->rt_fib_ap = (array_part_t){ &rp->rt_refc, 81, 0, NULL };
+		fibp->rt_fib_ap = (array_part_t){ &rp->rt_refc, 81, &fibp->szt_fib_ap };
 
 		fibp->rt_dfia [0].fib = (field_info_b_t){ &rp->fiat, FIBF_DEPENDENT | FIBF_ARRAY };
 		fibp->rt_dfib [0].fib = (field_info_b_t){ &rp->fibt, FIBF_DEPENDENT | FIBF_ARRAY };
@@ -393,7 +336,7 @@ context_t pta_setup(){
 		fibp->rt_pglim[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
 		fibp->rt_dynf [0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT };
 		fibp->rt_statf[0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT };
-		fibp->rt_pgl  [0].fib = (field_info_b_t){ &rp->pglt, FIBF_DEPENDENT };
+		fibp->rt_pgl  [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
 		fibp->rt_cdat [0].fib = (field_info_b_t){ NULL, FIBF_BASIC }; // set by the client
 		fibp->rt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
 
@@ -411,19 +354,19 @@ context_t pta_setup(){
 
 
 		// SIZE TYPE
-		fibp->szt_fib_ap = (array_part_t){ &rp->szt_refc, 8, 0, NULL };
+		fibp->szt_fib_ap = (array_part_t){ &rp->szt_refc, 8, &fibp->chrt_fib_ap };
 
 		fibp->szt_data[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
 
 		for (int i = 1; i < 8; i++) fibp->szt_data[i].fib = goback;
 
 		// CHAR TYPE
-		fibp->chrt_fib_ap = (array_part_t){ &rp->chrt_refc, 1, 0, NULL };
+		fibp->chrt_fib_ap = (array_part_t){ &rp->chrt_refc, 1, &fibp->fiat_fib_ap };
 
 		fibp->chrt_data[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
 
 		// FIAT TYPE
-		fibp->fiat_fib_ap = (array_part_t){ &rp->fiat_refc, 16, 0, NULL };
+		fibp->fiat_fib_ap = (array_part_t){ &rp->fiat_refc, 16, &fibp->fibt_fib_ap };
 		
 		fibp->fiat_ft[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
 		fibp->fiat_do[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // data offset
@@ -431,23 +374,15 @@ context_t pta_setup(){
 		for (int i = 1; i < 8; i++) fibp->fiat_do[i].fib = goback;
 		
 		// FIBT TYPE
-		fibp->fibt_fib_ap = (array_part_t){ &rp->fibt_refc, 9, 0, NULL };
+		fibp->fibt_fib_ap = (array_part_t){ &rp->fibt_refc, 9, &fibp->dht_fib_ap };
 		
 		fibp->fibt_ft   [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
 		fibp->fibt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC }; // flags
 		for (int i = 1; i < 8; i++) fibp->fibt_ft[i].fib = goback;
 		// fibt_flags is only 1 byte
 		
-		// PAGE LIST TYPE
-		fibp->pglt_fib_ap = (array_part_t){ &rp->pglt_refc, 16, 0, NULL };
-		
-		fibp->pglt_next[0].fib = (field_info_b_t){ &rp->pglt, FIBF_DEPENDENT }; // next
-		fibp->pglt_fi  [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // first_instance
-		for (int i = 1; i < 8; i++) fibp->pglt_next[i].fib = goback;
-		for (int i = 1; i < 8; i++) fibp->pglt_fi  [i].fib = goback;
-		
 		// DICT HEADER TYPE
-		fibp->dht_fib_ap = (array_part_t){ &rp->dht_refc, 24, 0, NULL };
+		fibp->dht_fib_ap = (array_part_t){ &rp->dht_refc, 24, &fibp->dbt_fib_ap };
 		
 		fibp->dht_fb [0].fib = (field_info_b_t){ &rp->dbt, FIBF_DEPENDENT }; // first_block
 		fibp->dht_ekv[0].fib = (field_info_b_t){ &rp->szt, FIBF_REFERENCES }; // empty_key_v
@@ -456,7 +391,7 @@ context_t pta_setup(){
 		for (int i = 1; i < 8; i++) fibp->dht_ekv[i].fib = goback;
 		
 		// DICT BLOCK TYPE
-		fibp->dbt_fib_ap = (array_part_t){ &rp->dbt_refc, 33, 0, NULL };
+		fibp->dbt_fib_ap = (array_part_t){ &rp->dbt_refc, 33, &fibp->art_fib_ap };
 		
 		fibp->dbt_eq  [0].fib = (field_info_b_t){ &rp->dbt,  FIBF_DEPENDENT }; // equal
 		fibp->dbt_uneq[0].fib = (field_info_b_t){ &rp->dbt,  FIBF_DEPENDENT }; // unequal
@@ -469,37 +404,17 @@ context_t pta_setup(){
 		// would be useless to set goback on pown
 		
 		// ARRAY TYPE
-		fibp->art_fib_ap = (array_part_t){ &rp->art_refc, 24, 0, NULL };
+		fibp->art_fib_ap = (array_part_t){ &rp->art_refc, 16, NULL };
 		
-		fibp->art_sz  [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // size
-		fibp->art_ffsp[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // following_free_space
-		fibp->art_next[0].fib = (field_info_b_t){ &rp->art, FIBF_DEPENDENT }; // next
-		for (int i = 1; i < 8; i++) fibp->art_sz  [i].fib = goback;
-		for (int i = 1; i < 8; i++) fibp->art_ffsp[i].fib = goback;
+		fibp->art_cap [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // capacity
+		fibp->art_next[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // next
+		for (int i = 1; i < 8; i++) fibp->art_cap [i].fib = goback;
 		for (int i = 1; i < 8; i++) fibp->art_next[i].fib = goback;
 
-		fibp->free = (array_part_t){ NULL, 0, page_size - PG_REL((&fibp->free)) - sizeof(array_part_t), NULL };
-	}
-	// PGL PAGE
-	if (true){
-		pglp->header = (page_desc_t){ &rp->pglt, PAGE_DEPENDENT };
-
-		// refc, next, first_instance
-
-		pglp->rt_p = (refc_pgl_t){ &rp->rt_refc, NULL, &rp->rt_refc };
-		pglp->fiat_p = (refc_pgl_t){ &rp->fiat_refc, NULL, &fiap->rt_fia_ap };
-		pglp->fibt_p = (refc_pgl_t){ &rp->fibt_refc, NULL, &fibp->rt_fib_ap };
-		pglp->pglt_p = (refc_pgl_t){ &rp->pglt_refc, NULL, &pglp->rt_p };
-		pglp->dht_p = (refc_pgl_t){ &rp->dht_refc, NULL, &dhp->rt.df_refc };
-
-		for (void * refc = &pglp->free; PG_REL(refc) < rp->pglt.page_limit; refc += rp->pglt.paged_size){
-			*(void **)refc = NULL;
-		}
+		fibp->free = (array_part_t){ NULL, 0, NULL };
 	}
 	// DH PAGE
 	if (true){
-		dhp->header = (page_desc_t){ &rp->dht, PAGE_DEPENDENT };
-
 		dhp->rt.df_refc = &rp->rt_refc;
 		dhp->rt.sf_refc = &rp->rt_refc;
 		dhp->rt.df = (dict_t){ NULL, NULL };
@@ -525,11 +440,6 @@ context_t pta_setup(){
 		dhp->fibt.df = (dict_t){ NULL, NULL };
 		dhp->fibt.sf = (dict_t){ NULL, NULL };
 
-		dhp->pglt.df_refc = &rp->pglt_refc;
-		dhp->pglt.sf_refc = &rp->pglt_refc;
-		dhp->pglt.df = (dict_t){ NULL, NULL };
-		dhp->pglt.sf = (dict_t){ NULL, NULL };
-
 		dhp->dht.df_refc = &rp->dht_refc;
 		dhp->dht.sf_refc = &rp->dht_refc;
 		dhp->dht.df = (dict_t){ NULL, NULL };
@@ -544,10 +454,6 @@ context_t pta_setup(){
 		dhp->art.sf_refc = &rp->art_refc;
 		dhp->art.df = (dict_t){ NULL, NULL };
 		dhp->art.sf = (dict_t){ NULL, NULL };
-
-		for (void * refc = &dhp->free; PG_REL(refc) < rp->dht.page_limit; refc += rp->dht.paged_size){
-			*(void **)refc = NULL;
-		}
 	}
 
 	context_t ctx = { &rp->rt, &rp->szt, &rp->chrt, &rp->dht };
@@ -579,11 +485,6 @@ context_t pta_setup(){
 		pta_dict_set_pa(df, const_array("field_type"),      FIBP(fibt_ft));
 		pta_dict_set_pa(df, const_array("flags"),           FIBP(fibt_flags));
 
-		// pglt
-		df = rp->pglt.dynamic_fields;
-		pta_dict_set_pa(df, const_array("next"),            FIBP(pglt_next));
-		pta_dict_set_pa(df, const_array("first_instance"),  FIBP(pglt_fi));
-
 		// dht
 		df = rp->dht.dynamic_fields;
 		pta_dict_set_pa(df, const_array("first_block"),     FIBP(dht_fb));
@@ -598,21 +499,21 @@ context_t pta_setup(){
 
 		// array
 		df = rp->art.dynamic_fields;
-		pta_dict_set_pa(df, const_array("size"),           FIBP(art_sz));
-		pta_dict_set_pa(df, const_array("ffsp"),           FIBP(art_ffsp));
-		pta_dict_set_pa(df, const_array("next"),           FIBP(art_next));
+		pta_dict_set_pa(df, const_array("capacity"),        FIBP(art_cap));
+		pta_dict_set_pa(df, const_array("next"),            FIBP(art_next));
 	}
 
 	return ctx;
 }
 
 void pta_for_each_type(type_t * root_type, pta_for_each_type_callback cb, void * arg){
-	page_list_t * pgl = pta_get_c_object(root_type->page_list);
-	while (pgl){
-		for (void * refc = pgl->first_instance; PG_REL(refc) < root_type->page_limit; refc += root_type->paged_size){
+	page_desc_t * desc = root_type->page_list;
+	while (desc){
+		size_t pg_limit = PG_LIMIT(desc, root_type);
+		for (void * refc = PG_REFC2(desc); PP(refc).s < pg_limit; refc += root_type->paged_size){
 			if (*(void **)refc == NULL) continue;
 			cb(refc, arg);
 		}
-		pgl = pta_get_c_object(pgl->next);
+		desc = PG_NEXT(desc);
 	}
 }

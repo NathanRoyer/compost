@@ -20,22 +20,21 @@
 #include "types/refc.h"
 
 void ** find_raw_refc(void * address){
-	page_desc_t * page = locate_page_descriptor(address);
-	if (page->flags & PAGE_ARRAY){
-		array_part_t * array_part = PG_REFC(page), * next_ap;
-		while (true){
-			next_ap = array_next(array_part, page->type);
+	page_desc_t * desc = get_page_descriptor(address);
+	if (PG_FLAGS(desc) & PAGE_ARRAY){
+		array_part_t * array_part = PG_REFC2(desc), * next_ap;
+		while ((next_ap = array_part->next) != NULL){
 			if (address < (void *)next_ap) break;
 			else array_part = next_ap;
 		}
-		return (void **)&array_part->refc;
-	} else return address - ((PG_REL(address) - sizeof(page_desc_t)) % page->type->paged_size);
+		return &array_part->refc;
+	} else return address - ((PP(address).s - PP(desc + 1).s) % PG_TYPE2(desc)->paged_size);
 }
 
 void * pta_get_final_obj(void * address){
 	// void * bckdbg = address;
 	address = find_raw_refc(address);
-	while ((locate_page_descriptor(address)->flags & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address){
+	while ((PG_FLAGS(get_page_descriptor(address)) & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address){
 		address = *(void **)address;
 	}
 	return address;
@@ -71,8 +70,8 @@ bool is_obj_referenced(void * obj){
  */
 int pta_type_instances(type_t * type){
 	int n = 0;
-	for (page_list_t * pl = pta_get_c_object(type->page_list); pl; pl = pta_get_c_object(pl->next)){
-		n += page_occupied_slots(pl->first_instance, type);
+	for (page_desc_t * desc = type->page_list; desc; desc = PG_NEXT(desc)){
+		n += page_occupied_slots(PG_LIMIT(desc, type), PG_FLAGS(desc), PG_REFC2(desc), type);
 	}
 	return n;
 }
@@ -82,12 +81,10 @@ int pta_type_instances(type_t * type){
  *
  * Updates the page-list of a type, effectively removing
  * the empty pages (i.e. containing no referenced instances).
- * It then unsets the TYPE_HAS_UNREF flag.
  * Return value: none
  */
 void pta_remove_superfluous_pages(type_t * type, bool should_delete){
 	type->page_list = update_page_list(type->page_list, type, should_delete);
-	// if (should_delete) type->flags &= ~TYPE_HAS_UNREF;
 }
 
 /* garbage_collect (root type pointer root_type)
@@ -102,15 +99,16 @@ void pta_garbage_collect(type_t * root_type){
 	 * TODO : pre-run to subtract independent-references that
 	 * are unreferenced themselves
 	 */
-	page_list_t * pgl, * pgl_bck = pta_get_c_object(root_type->page_list);
+	page_desc_t * desc, * desc_bck = root_type->page_list;
 	for (size_t i = 0; i < 2; i++){
-		pgl = pgl_bck;
-		while (pgl){
-			for (void * refc = pgl->first_instance; PG_REL(refc) < root_type->page_limit; refc += root_type->paged_size){
+		desc = desc_bck;
+		while (desc){
+			size_t pg_limit = PG_LIMIT(desc, root_type);
+			for (void * refc = PG_REFC2(desc); PP(refc).s < pg_limit; refc += root_type->paged_size){
 				if (*(void **)refc == NULL) continue;
 				pta_remove_superfluous_pages(pta_get_c_object(refc), i > 0);
 			}
-			pgl = pta_get_c_object(pgl->next);
+			desc = PG_NEXT(desc);
 		}
 	}
 }

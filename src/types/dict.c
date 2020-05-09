@@ -44,7 +44,7 @@ void new_dict_block(void * field, root_page_t * rp, int8_t key_part){
  */
 void * dict_get_internal(void * d_refc, void * al_key, array pa_key){
 	dict_t * d = pta_get_c_object(d_refc);
-	size_t key_length = (al_key == NULL) ? pa_key.length : pta_array_length(al_key);
+	size_t key_length = (al_key == NULL) ? pa_key.length : pta_array_capacity(al_key);
 	if (key_length == 0) return d->empty_key_v;
 	dict_block_t * dblk = pta_get_c_object(d->first_block);
 
@@ -78,7 +78,7 @@ void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * valu
 	root_page_t * rp = get_root_page(d_refc);
 
 	dict_t * d = pta_get_c_object(d_refc);
-	size_t key_length = (key_al == NULL) ? key_pa.length : pta_array_length(key_al);
+	size_t key_length = (key_al == NULL) ? key_pa.length : pta_array_capacity(key_al);
 	char c;
 	void ** value_holder = NULL;
 	if (key_length == 0) value_holder = &d->empty_key_v;

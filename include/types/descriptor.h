@@ -24,15 +24,6 @@
 
 typedef PTA_STRUCT page_desc page_desc_t;
 
-typedef union ptr ptr_t;
-typedef union ptr {
-	ptr_t * p;
-	size_t s;
-} ptr_t;
-#define SP(v) ((ptr_t){ .s = (v) })
-#define PP(v) ((ptr_t){ .p = (v) })
-#define PTR_BITS (sizeof(void *) * 8)
-
 size_t reg_mask;
 ptr_t first_reg;
 
@@ -45,9 +36,14 @@ size_t reg_md_bits;
 size_t reg_part_bits;
 size_t reg_last_part_bits;
 
+#define PAGE_BASIC     0b0000
+#define PAGE_DEPENDENT 0b0001
+#define PAGE_ARRAY     0b0010
+
 typedef PTA_STRUCT page_desc {
-	type_t * type;
-	uint8_t flags;
+	ptr_t type;
+	ptr_t next;
+	ptr_t flags_and_limit;
 } page_desc_t;
 
 void compute_regs_config();
@@ -58,8 +54,8 @@ ptr_t get_reg_metadata(ptr_t reg);
 
 void set_reg_metadata(ptr_t reg, ptr_t metadata);
 
-page_desc_t * locate_page_descriptor(void * address);
+page_desc_t * get_page_descriptor(void * address);
 
-void create_page_descriptor(ptr_t address, page_desc_t * desc);
+void set_page_descriptor(ptr_t address, page_desc_t * desc);
 
 #endif

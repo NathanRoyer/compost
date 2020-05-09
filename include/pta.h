@@ -85,9 +85,7 @@ extern pta_obj pta_spot_array(pta_type_t * type, size_t size);
 
 extern void * pta_spot_array_dependent(void * destination, pta_type_t * type, size_t size);
 
-size_t pta_array_length(pta_obj array);
-
-void pta_resize_array(pta_obj array, size_t length);
+size_t pta_array_capacity(pta_obj array);
 
 void * pta_array_get(pta_obj array, size_t index);
 
