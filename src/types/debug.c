@@ -135,7 +135,6 @@ size_t print_value(void * object, size_t size){
 void show_fields(void * obj, size_t recursion){
 	// sleep(1);
 	if (obj == NULL) return (void) printf(" (NULL)\n");
-	else if (pta_is_pointer(obj)) obj = *(void **)obj;
 	type_t * type = pta_type_of(obj);
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
@@ -148,6 +147,7 @@ void show_fields(void * obj, size_t recursion){
 		} else print_value(c_obj, type->object_size);
 		putchar('\n');
 	} else {
+		if (pta_is_pointer(obj)) obj = *(void **)obj;
 		if (recursion) putchar('\n');
 		array str = { -1, NULL };
 		do {

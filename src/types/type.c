@@ -500,7 +500,6 @@ context_t pta_setup(){
 		// array
 		df = rp->art.dynamic_fields;
 		pta_dict_set_pa(df, const_array("capacity"),        FIBP(art_cap));
-		pta_dict_set_pa(df, const_array("next"),            FIBP(art_next));
 	}
 
 	return ctx;

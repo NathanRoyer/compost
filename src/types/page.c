@@ -198,33 +198,28 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 		uint8_t flags = PG_FLAGS(desc);
 
 		if (should_delete && page_occupied_slots(pg_limit, flags, first_instance, type) == 0){
-			if (flags & PAGE_ARRAY){
-				printf("LibPTA: GC - not implemented\n");
-			} else if (type->flags & TYPE_MALLOC_F){
-				size_t offset = type->paged_size - type->object_size;
-				for (size_t i = 0; i < type->object_size; i++){
-					field_info_b_t * fib = GET_FIB(type, i);
-					if (fib->flags & (FIBF_MALLOC)){
-						for (void * refc = first_instance; refc && PP(refc).s < pg_limit;){
-							void * mallocd_addr = *(void **)(refc + offset + i);
-							if (mallocd_addr != NULL) free(mallocd_addr);
-							if (PG_FLAGS(desc) & PAGE_ARRAY) refc = ((array_part_t *)refc)->next;
-							else refc += type->paged_size;
-						}
-					}
-				}
-			}
 			size_t bytes = PG_RAW_LIMIT(desc) - PP(desc).s;
 			pta_pages -= bytes / page_size;
 			munmap(desc, bytes);
 			desc = next_desc;
-		} else if (PG_FLAGS(desc) & PAGE_DEPENDENT){
+		} else {
 			// first gc iteration
 			// goal: detach all dependent objects
-			for (void * refc = first_instance; refc && PP(refc).s < pg_limit;){
-				if (*(void **)refc != NULL && (!is_obj_referenced(refc))) *(void **)refc = NULL;
-				if (PG_FLAGS(desc) & PAGE_ARRAY) refc = ((array_part_t *)refc)->next;
-				else refc += type->paged_size;
+
+			for (array_part_t * refc = first_instance; refc && PP(refc).s < pg_limit; ){
+				bool unreferenced = !is_obj_referenced(refc);
+				if (flags & PAGE_ARRAY){
+					if (unreferenced){
+						for (size_t i = 0; i < refc->capacity; i++){
+							void * c_object = pta_array_get(refc, i);
+							reset_fields(c_object + type->offsets, type);
+						}
+					}
+					refc = refc->next;
+				} else {
+					if (unreferenced) reset_fields(pta_get_c_object(refc), type);
+					refc = (array_part_t *)(PP(refc).s + type->paged_size);
+				}
 			}
 		}
 	}
