@@ -147,7 +147,10 @@ void show_fields(void * obj, size_t recursion){
 		} else print_value(c_obj, type->object_size);
 		putchar('\n');
 	} else {
-		if (pta_is_pointer(obj)) obj = *(void **)obj;
+		if (pta_is_pointer(obj)){
+			obj = *(void **)obj;
+			type = pta_type_of(obj);
+		}
 		if (recursion) putchar('\n');
 		array str = { -1, NULL };
 		do {

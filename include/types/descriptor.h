@@ -40,7 +40,7 @@ size_t reg_last_part_bits;
 #define PAGE_DEPENDENT 0b0001
 #define PAGE_ARRAY     0b0010
 
-typedef PTA_STRUCT page_desc {
+typedef struct page_desc {
 	ptr_t type;
 	ptr_t next;
 	ptr_t flags_and_limit;
