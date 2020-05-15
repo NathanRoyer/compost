@@ -22,7 +22,7 @@
 
 #include "type.h"
 
-typedef PTA_STRUCT page_desc page_desc_t;
+typedef struct page_desc page_desc_t;
 
 size_t reg_mask;
 ptr_t first_reg;

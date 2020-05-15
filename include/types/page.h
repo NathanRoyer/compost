@@ -33,8 +33,8 @@ typedef PTA_STRUCT root_page root_page_t;
 
 typedef PTA_STRUCT array_part {
 	void * refc;
-	size_t capacity;
 	array_part_t * next;
+	size_t capacity;
 } array_part_t;
 
 size_t page_size;
@@ -99,8 +99,6 @@ typedef PTA_STRUCT root_page {
 
 	refc_t art_refc; // array_type
 	type_t art;
-	
-	refc_t free;
 } root_page_t;
 
 #endif
