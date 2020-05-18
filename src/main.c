@@ -154,6 +154,7 @@ int main(int argc, char *argv[]){
 			printf("type NEW_TYPE        create a new type\n");
 		} else if (CMD("pages")){
 			printf("%lu pages\n", pta_pages);
+			pta_print_regs();
 		} else if (!CMD("")) printf("Unknown command: \"%s\".\n", cmd);
 		free(cmd);
 	}

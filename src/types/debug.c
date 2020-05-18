@@ -19,6 +19,28 @@
 
 #include "types/debug.h"
 
+size_t reg_cap;
+
+void print_reg_content(ptr_t reg, size_t recursion, bool explore){
+	printf("%0*s‣ %p\n", recursion * 3, " ", reg.p);
+	if (explore){
+		size_t i = reg.s & reg_i_mask;
+		reg.s = reg.s & page_mask;
+		ptr_t md = get_reg_metadata(reg);
+		explore = i > page_relative_bits;
+		if (explore) printf("MD = %p\n", recursion * 3, " ", md.p);
+		for (size_t r = 0; r < reg_cap; r++){
+			ptr_t content = reg.p[r];
+			if (content.s & (explore ? page_mask : content.s)) print_reg_content(content, recursion + 1, i > page_relative_bits);
+		}
+	}
+}
+
+void pta_print_regs(){
+	reg_cap = reg_mask + 1;
+	print_reg_content(first_reg, 0, true);
+}
+
 size_t pta_print_cstr(array string){
 	for (int i = 0; i < string.length; i++) putc(char_at(string, i), stdout);
 	return string.length;
@@ -35,8 +57,7 @@ void print_color(int n, bool inverted){
 char field_flags_str[] = "ffff";
 void load_fields(uint8_t flags){
 	int i = 0;
-	/**/ if (IS_(flags, FIBF_ARRAY     )) field_flags_str[i] = 'A';
-	else if (IS_(flags, FIBF_DEPENDENT )) field_flags_str[i] = 'D';
+	/**/ if (IS_(flags, FIBF_DEPENDENT )) field_flags_str[i] = 'D';
 	else if (IS_(flags, FIBF_REFERENCES)) field_flags_str[i] = 'R';
 	else if (IS_(flags, FIBF_POINTER   )) field_flags_str[i] = 'P';
 	else field_flags_str[i] = '-';
@@ -167,20 +188,20 @@ void show_fields(void * obj, size_t recursion){
 		} while (str.data != NULL);
 	}
 	if (type->flags & TYPE_ARRAY){
-		array_part_t * array_part = obj;
+		array_obj_t * array_obj = obj;
 		printf("%0*s‣ content: ", recursion * 3, " ");
-		if (PG_TYPE2(get_page_descriptor(obj))->flags & TYPE_CHAR){
+		if (((type_t *)pta_get_c_object(array_obj->content_type))->flags & TYPE_CHAR){
 			putchar('\"');
-			for (size_t i = 0; i < array_part->capacity; i++){
-				print_char(*(char *)pta_get_c_object(pta_array_get(array_part, i)));
+			for (size_t i = 0; i < array_obj->capacity; i++){
+				print_char(*(char *)pta_get_c_object(pta_array_get(array_obj, i)));
 			}
 			printf("\"\n");
 		} else {
 			putchar('\n');
 			recursion++;
-			for (size_t i = 0; i < array_part->capacity; i++){
+			for (size_t i = 0; i < array_obj->capacity; i++){
 				printf("%0*s• [%li]", recursion * 3, " ", i);
-				show_fields(pta_array_get(array_part, i), recursion + 1);
+				show_fields(pta_array_get(array_obj, i), recursion + 1);
 			}
 		}
 	}

@@ -23,6 +23,7 @@
 #include "type.h"
 #include "refc.h"
 #include "field.h"
+#include "descriptor.h"
 #include "page.h"
 #include "dict.h"
 #include <stdio.h>
@@ -33,6 +34,8 @@ typedef PTA_STRUCT dbg_field_info {
 	size_t offset;
 	uint8_t flags;
 } dbg_field_info_t;
+
+void pta_print_regs();
 
 size_t pta_print_cstr(array string);
 

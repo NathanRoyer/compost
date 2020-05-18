@@ -34,7 +34,7 @@ typedef PTA_STRUCT field_info_b field_info_b_t;
 #define FIBF_AUTO_INST  0b00000010
 #define FIBF_DEPENDENT  0b00000101 // includes FIBF_POINTER
 #define FIBF_NESTED     0b00001000
-#define FIBF_ARRAY      0b00010000
+#define FIBF_ARRAY      -DONT- // 0b00010000
 #define FIBF_MALLOC     0b00100000
 #define FIBF_REFERENCES 0b01000001 // includes FIBF_POINTER
 #define FIBF_PREV_OWNER 0b10000000
@@ -57,7 +57,9 @@ void * pta_get_c_object(void * obj);
 
 void * pta_prepare(void * obj, type_t * type);
 
-void * attach_field(void * host, void * field, void * dependent);
+void * detach_field(void * raw_refc, void * field);
+
+void * attach_field(void * raw_refc, void * field, void * dependent);
 
 void * pta_detach_dependent(void * field);
 

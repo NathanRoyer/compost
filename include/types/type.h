@@ -62,12 +62,12 @@ typedef union ptr {
 typedef PTA_STRUCT type {
 	void * dfia;           // field offsets
 	void * dfib;           // real fields
-	size_t object_size;    // unavoidable
-	size_t offsets;        // unavoidable
-	size_t paged_size;     // avoidable
-	size_t allocation;     // how many pages to allocate at once
-	void * dynamic_fields; // name -> offset
-	void * static_fields;  // name -> pointer
+	size_t object_size;    // 
+	size_t offsets;        // 
+	size_t paged_size;     // 
+	size_t allocation;     // how many pages to allocate at once - not used yet
+	void * dynamic_fields; // name -> field_info_*
+	void * static_fields;  // name -> *
 	void * page_list;
 	void * client_data;
 	uint8_t flags;
@@ -81,6 +81,7 @@ typedef struct {
 	type_t * szt;
 	type_t * chrt;
 	type_t * dht;
+	type_t * art;
 } context_t;
 
 context_t pta_setup();

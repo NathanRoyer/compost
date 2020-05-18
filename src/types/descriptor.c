@@ -73,7 +73,7 @@ ptr_t get_reg_metadata(ptr_t reg){
 		// printf("   get-md (i=%li) = %p\n", i, (reg.p->s >> reg_i_bits) & reg_md_mask);
 		metadata.s |= ((reg.p++->s >> reg_i_bits) & reg_md_mask) << i;
 	}
-	printf(" : %p\n", metadata.p);
+	// printf(" : %p\n", metadata.p);
 	return metadata;
 }
 

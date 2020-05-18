@@ -23,38 +23,34 @@ typedef struct obj_info {
 	size_t offsets_zone;
 	size_t offset;
 	type_t * page_type;
-	uint8_t page_flags;
 } obj_info_t;
 
 obj_info_t get_info(void * obj){
 	page_desc_t * desc = get_page_descriptor(obj);
 	type_t * type = PG_TYPE2(desc);
-	size_t offset;
-	if (PG_FLAGS(desc) & PAGE_ARRAY){
-		array_part_t * array_part = PG_REFC2(desc), * next_ap;
-		while ((next_ap = array_part->next) != NULL){
+	obj_info_t info;
+	if (type->flags & TYPE_ARRAY){
+		array_obj_t * array_obj = PG_REFC2(desc), * next_ap;
+		while ((next_ap = array_obj->next) != NULL){
 			if (obj < (void *)next_ap) break;
-			else array_part = next_ap;
+			else array_obj = next_ap;
 		}
 
-		if (obj < (void *)array_part + sizeof(array_part_t)){
-			 obj_info_t info = {
-				0,
-				(size_t)obj - (size_t)array_part,
-				&(get_root_page(type)->art), 
-				PG_FLAGS(desc)
-			};
-			info.offsets_zone = GET_OFFSET_ZONE(info.page_type);
-			return info;
+		if (obj < (void *)array_obj + sizeof(array_obj_t)){
+			info.offsets_zone = GET_OFFSET_ZONE(type);
+			info.offset = (size_t)obj - (size_t)array_obj;
 		} else {
-			offset = obj - ((void *)array_part + sizeof(array_part_t));
-			offset %= type->object_size + type->offsets;
+			type = pta_get_c_object(array_obj->content_type);
+			info.offsets_zone = type->offsets;
+			info.offset = obj - ((void *)array_obj + sizeof(array_obj_t));
+			info.offset %= type->object_size + type->offsets;
 		}
-	} else offset = (PP(obj).s - PP(desc + 1).s) % type->paged_size;
-	return (obj_info_t){
-		(PG_FLAGS(desc) & PAGE_ARRAY) ? type->offsets : GET_OFFSET_ZONE(type),
-		offset, type, PG_FLAGS(desc)
-	};
+	} else {
+		info.offset = (PP(obj).s - PP(desc + 1).s) % type->paged_size;
+		info.offsets_zone = GET_OFFSET_ZONE(type);
+	}
+	info.page_type = type;
+	return info;
 }
 
 void * pta_get_obj(void * address){
@@ -138,7 +134,7 @@ void * pta_prepare(void * obj, type_t * type){
 						if ((field_flags & FIBF_AUTO_INST)){
 							if ((field_flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
 								void * new_field = pta_spot_dependent(field, field_type);
-								pta_prepare(new_field, (field_flags & FIBF_ARRAY) ? NULL : field_type);
+								pta_prepare(new_field, field_type);
 							} else if (field_flags & FIBF_POINTER){
 								should_zero = sizeof(void *); // independent pointer
 							} else pta_prepare(field, field_type); // nested
@@ -161,36 +157,36 @@ void misbound_error(){
 	*(char *)NULL = '\0';
 }
 
-void * detach_field(void * host, void * field){
+void * detach_field(void * raw_refc, void * field){
 	void * dependent = *(void **)field;
 	if (dependent != NULL){
 		void ** distant_refc = find_raw_refc(dependent);
-		if (*distant_refc == find_raw_refc(host)) *distant_refc = NULL;
+		if (*distant_refc == raw_refc) *distant_refc = NULL;
 		else misbound_error();
 		*(void **)field = NULL;
 	}
 	return dependent;
 }
 
-void * attach_field(void * host, void * field, void * dependent){
-	void * bck = detach_field(host, field);
+void * attach_field(void * raw_refc, void * field, void * dependent){
+	void * bck = detach_field(raw_refc, field);
 	void ** distant_refc = find_raw_refc(dependent);
 	if ((*distant_refc != NULL) && (*distant_refc != FAKE_DEPENDENT(distant_refc))) misbound_error();
-	*distant_refc = find_raw_refc(host);
+	*distant_refc = raw_refc;
 	*(void **)field = dependent;
 	return bck;
 }
 
 void * pta_detach_dependent(void * field){
-	void * host = pta_get_obj(field);
+	void * raw_refc = find_raw_refc(field);
 	uint8_t flags = pta_get_flags(field);
-	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? detach_field(host, field) : NULL;
+	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? detach_field(raw_refc, field) : NULL;
 }
 
 void * pta_attach_dependent(void * field, void * dependent_obj){
-	void * host = pta_get_obj(field);
+	void * raw_refc = find_raw_refc(field);
 	uint8_t flags = pta_get_flags(field);
-	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? attach_field(host, field, dependent_obj) : NULL;
+	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? attach_field(raw_refc, field, dependent_obj) : NULL;
 }
 
 void ** get_previous_owner(void * ref_field){
@@ -252,7 +248,7 @@ void reset_fields(void * c_object, type_t * type){
 	for (size_t i = 0; i < type->object_size; i++){
 		field_info_b_t * fib = GET_FIB(type, i);
 		void * field = c_object + i;
-		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(c_object, field);
+		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(find_raw_refc(c_object), field);
 		else if ((fib->flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 			*(void **)field = NULL;

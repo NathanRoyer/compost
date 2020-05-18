@@ -24,18 +24,19 @@
 #include <unistd.h>
 #include "type.h"
 
-typedef PTA_STRUCT array_part array_part_t;
+typedef PTA_STRUCT array_obj array_obj_t;
 typedef PTA_STRUCT root_page root_page_t;
 
 #include "refc.h"
 #include "field.h"
 #include "descriptor.h"
 
-typedef PTA_STRUCT array_part {
+typedef PTA_STRUCT array_obj {
 	void * refc;
-	array_part_t * next;
+	array_obj_t * next;
+	void * content_type;
 	size_t capacity;
-} array_part_t;
+} array_obj_t;
 
 size_t page_size;
 size_t page_rel_mask;
@@ -57,15 +58,15 @@ void * pta_spot_array(type_t * type, size_t size);
 
 void * pta_spot_array_dependent(void * destination, type_t * type, size_t size);
 
-void grow_array(page_desc_t * desc, array_part_t * array_part, type_t * type);
+void shrink_array(page_desc_t * desc, array_obj_t * array_obj, size_t array_bytes);
 
-void shrink_array(page_desc_t * desc, array_part_t * array_part, type_t * type, size_t array_capacity);
+void grow_array(page_desc_t * desc, array_obj_t * array_obj);
 
-size_t pta_array_capacity(array_part_t * array_part);
+size_t pta_array_capacity(array_obj_t * array_obj);
 
-void * pta_array_get(array_part_t * array_part, size_t index);
+void * pta_array_get(array_obj_t * array_obj, size_t index);
 
-size_t pta_array_find(array_part_t * array_part, void * item);
+size_t pta_array_find(array_obj_t * array_obj, void * item);
 
 size_t page_occupied_slots(size_t pg_limit, uint8_t flags, void * first_instance, type_t * type);
 

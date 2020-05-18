@@ -33,15 +33,14 @@ void get_system_paging_config(){
 	compute_regs_config();
 }
 
-void * spot_internal(type_t * type, uint8_t flags, size_t array_capacity){
+void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 	page_desc_t * desc = type->page_list;
-	bool array_f = flags & PAGE_ARRAY;
+	bool array_f = array_bytes != 0;
 	while (true){
 		if (desc == NULL){
 			size_t contig_pages;
 			if (array_f){
-				size_t bytes = (type->object_size + type->offsets) * array_capacity;
-				bytes += sizeof(array_part_t) + sizeof(page_desc_t);
+				size_t bytes = array_bytes + sizeof(array_obj_t) + sizeof(page_desc_t);
 				contig_pages = CEILDIV(bytes, page_size);
 			} else contig_pages = 1;
 
@@ -58,22 +57,17 @@ void * spot_internal(type_t * type, uint8_t flags, size_t array_capacity){
 		} else {
 			size_t pg_limit = PG_LIMIT(desc, type);
 			if (flags == PG_FLAGS(desc)){
-				for (array_part_t * refc = PG_REFC2(desc); refc && PP(refc).s < pg_limit; ){
+				for (array_obj_t * refc = PG_REFC2(desc); refc && PP(refc).s < pg_limit; ){
 					if (!is_obj_referenced(refc)){
-						if (array_f) grow_array(desc, refc, type);
-						if ((!array_f) || refc->capacity >= array_capacity){
-							if (array_f){
-								shrink_array(desc, refc, type, array_capacity);
-								for (size_t i = 0; i < array_capacity; i++){
-									void * c_object = pta_array_get(refc, i);
-									reset_fields(c_object + type->offsets, type);
-								}
-							} else reset_fields(pta_get_c_object(refc), type);
+						if (array_f) grow_array(desc, refc);
+						if ((!array_f) || refc->capacity >= array_bytes){
+							if (array_f) shrink_array(desc, refc, array_bytes);
+							else reset_fields(pta_get_c_object(refc), type);
 							return refc;
-						}
+						} else if (array_f) refc->capacity = 0;
 					}
 					if (array_f) refc = refc->next;
-					else refc = (array_part_t *)(PP(refc).s + type->paged_size);
+					else refc = (array_obj_t *)(PP(refc).s + type->paged_size);
 				}
 			}
 			desc = PG_NEXT(desc);
@@ -95,71 +89,80 @@ void * pta_spot_dependent(void * destination, type_t * type){
 	return new_spot;
 }
 
-/* grow_array (private function)
- * note: this function is not meant to be used externally
- * note: array_part_t comprises the reference counter
- *
- * Enlarges an array's size by occupying the following empty space;
- * If an unreferenced array is found, it will be incroporated.
- * Return value: none
- */
-void grow_array(page_desc_t * desc, array_part_t * array_part, type_t * type){
-	while (array_part->next != NULL && !is_obj_referenced(array_part->next)){
-		array_part->next = array_part->next->next;
+void reset_array(array_obj_t * array_obj){
+	type_t * type = pta_get_c_object(array_obj->content_type);
+	for (size_t i = 0; i < array_obj->capacity; i++){
+		void * c_object = pta_array_get(array_obj, i);
+		reset_fields(c_object + type->offsets, type);
 	}
-	size_t high_boundary = (array_part->next == NULL) ? PG_RAW_LIMIT(desc) : PP(array_part->next).s;
-	// plus one means advance to content :
-	array_part->capacity = (high_boundary - PP(array_part + 1).s) / (type->object_size + type->offsets);
 }
 
-void shrink_array(page_desc_t * desc, array_part_t * array_part, type_t * type, size_t array_capacity){
-	size_t high_boundary = (array_part->next == NULL) ? PG_RAW_LIMIT(desc) : PP(array_part->next).s;
-	size_t content_size = type->object_size + type->offsets;
-	size_t next = (PP(array_part + 1).s + array_capacity * content_size);
+void grow_array(page_desc_t * desc, array_obj_t * array_obj){
+	reset_array(array_obj);
+	while (array_obj->next != NULL && !is_obj_referenced(array_obj->next)){
+		reset_array(array_obj->next);
+		array_obj->next = array_obj->next->next;
+	}
+	size_t high_boundary = (array_obj->next == NULL) ? PG_RAW_LIMIT(desc) : PP(array_obj->next).s;
+	// plus one means advance to content :
+	array_obj->capacity = (high_boundary - PP(array_obj + 1).s);
+	// here, array_obj->capacity = capacity in bytes
+}
+
+void shrink_array(page_desc_t * desc, array_obj_t * array_obj, size_t array_bytes){
+	size_t high_boundary = (array_obj->next == NULL) ? PG_RAW_LIMIT(desc) : PP(array_obj->next).s;
+	size_t next = PP(array_obj + 1).s + array_bytes;
 	size_t excess = high_boundary - next;
-	if (excess > sizeof(array_part_t)){
-		array_part_t * new_array = (array_part_t *)next;
+	if (excess > sizeof(array_obj_t)){
+		array_obj_t * new_array = (array_obj_t *)next;
 		new_array->refc = NULL;
 		new_array->capacity = 0;
-		new_array->next = array_part->next;
-		array_part->next = new_array;
+		new_array->next = array_obj->next;
+		array_obj->next = new_array;
 	}
-	array_part->capacity = array_capacity;
 }
 
-size_t pta_array_capacity(array_part_t * array_part){
-	return array_part->capacity;
+size_t pta_array_capacity(array_obj_t * array_obj){
+	return array_obj->capacity;
+}
+
+void * pta_spot_array_internal(type_t * type, size_t capacity, uint8_t flags){
+	size_t array_bytes = capacity * (type->object_size + type->offsets);
+	array_obj_t * array_obj = spot_internal(&get_root_page(type)->art, flags, array_bytes);
+	array_obj->content_type = type;
+	array_obj->capacity = capacity;
+	return (void *)array_obj;
 }
 
 void * pta_spot_array(type_t * type, size_t capacity){
-	return spot_internal(type, PAGE_ARRAY, capacity);
+	return pta_spot_array_internal(type, capacity, PAGE_BASIC);
 }
 
 void * pta_spot_array_dependent(void * destination, type_t * type, size_t capacity){
 	void ** new_spot;
 	uint8_t flags = pta_get_flags(destination);
 	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
-		new_spot = spot_internal(type, PAGE_ARRAY | PAGE_DEPENDENT, capacity);
-		attach_field(pta_get_obj(destination), destination, new_spot);
+		new_spot = pta_spot_array_internal(type, capacity, PAGE_DEPENDENT);
+		attach_field(find_raw_refc(destination), destination, new_spot);
 	} else new_spot = NULL;
 	return new_spot;
 }
 
-/* array_get (array_part_t pointer array_part, 64bit index)
- * note: array_part_t comprises the reference counter
+/* array_get (array_obj_t pointer array_obj, 64bit index)
+ * note: array_obj_t comprises the reference counter
  *
  * Finds the instance at the specified index in the specified array.
  * Return value: pointer to an instance of the array' contained type
  */
-void * pta_array_get(array_part_t * array_part, size_t index){
-	type_t * type = PG_TYPE2(get_page_descriptor(array_part));
-	return (void *)array_part + sizeof(array_part_t) + (index * (type->object_size + type->offsets));
+void * pta_array_get(array_obj_t * array_obj, size_t index){
+	type_t * type = pta_get_c_object(array_obj->content_type);
+	return (void *)array_obj + sizeof(array_obj_t) + (index * (type->object_size + type->offsets));
 }
 
-size_t pta_array_find(array_part_t * array_part, void * item){
-	type_t * type = PG_TYPE2(get_page_descriptor(array_part));
-	array_part += 1; // advance to content
-	return (PP(item).s - PP(array_part).s) / (type->object_size + type->offsets);
+size_t pta_array_find(array_obj_t * array_obj, void * item){
+	type_t * type = pta_get_c_object(array_obj->content_type);
+	array_obj += 1; // advance to content
+	return (PP(item).s - PP(array_obj).s) / (type->object_size + type->offsets);
 }
 
 /* page_occupied_slots (obj pointer first_instance, type_t pointer type)
@@ -173,7 +176,7 @@ size_t page_occupied_slots(size_t pg_limit, uint8_t flags, void * first_instance
 	size_t n = 0;
 	for (void * refc = first_instance; refc && PP(refc).s < pg_limit;){
 		n += is_obj_referenced(refc);
-		if (flags & PAGE_ARRAY) refc = ((array_part_t *)refc)->next;
+		if (type->flags & TYPE_ARRAY) refc = ((array_obj_t *)refc)->next;
 		else refc += type->paged_size;
 	}
 	return n;
@@ -206,9 +209,9 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 			// first gc iteration
 			// goal: detach all dependent objects
 
-			for (array_part_t * refc = first_instance; refc && PP(refc).s < pg_limit; ){
+			for (array_obj_t * refc = first_instance; refc && PP(refc).s < pg_limit; ){
 				bool unreferenced = !is_obj_referenced(refc);
-				if (flags & PAGE_ARRAY){
+				if (type->flags & TYPE_ARRAY){
 					if (unreferenced){
 						for (size_t i = 0; i < refc->capacity; i++){
 							void * c_object = pta_array_get(refc, i);
@@ -218,7 +221,7 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 					refc = refc->next;
 				} else {
 					if (unreferenced) reset_fields(pta_get_c_object(refc), type);
-					refc = (array_part_t *)(PP(refc).s + type->paged_size);
+					refc = (array_obj_t *)(PP(refc).s + type->paged_size);
 				}
 			}
 		}

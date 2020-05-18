@@ -21,13 +21,13 @@
 
 void ** find_raw_refc(void * address){
 	page_desc_t * desc = get_page_descriptor(address);
-	if (PG_FLAGS(desc) & PAGE_ARRAY){
-		array_part_t * array_part = PG_REFC2(desc), * next_ap;
-		while ((next_ap = array_part->next) != NULL){
+	if (PG_TYPE2(desc)->flags & TYPE_ARRAY){
+		array_obj_t * array_obj = PG_REFC2(desc), * next_ap;
+		while ((next_ap = array_obj->next) != NULL){
 			if (address < (void *)next_ap) break;
-			else array_part = next_ap;
+			else array_obj = next_ap;
 		}
-		return &array_part->refc;
+		return &array_obj->refc;
 	} else return address - ((PP(address).s - PP(desc + 1).s) % PG_TYPE2(desc)->paged_size);
 }
 

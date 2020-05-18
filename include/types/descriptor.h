@@ -25,6 +25,7 @@
 typedef struct page_desc page_desc_t;
 
 size_t reg_mask;
+size_t page_relative_bits;
 ptr_t first_reg;
 
 size_t reg_i_mask;
@@ -38,7 +39,7 @@ size_t reg_last_part_bits;
 
 #define PAGE_BASIC     0b0000
 #define PAGE_DEPENDENT 0b0001
-#define PAGE_ARRAY     0b0010
+#define PAGE_ARRAY     -DONT- // 0b0010
 
 typedef struct page_desc {
 	ptr_t type;
@@ -57,5 +58,7 @@ void set_reg_metadata(ptr_t reg, ptr_t metadata);
 page_desc_t * get_page_descriptor(void * address);
 
 void set_page_descriptor(ptr_t address, page_desc_t * desc);
+
+void prepare_page_desc(page_desc_t * desc, type_t * type, void * next, size_t contig_len, uint8_t flags);
 
 #endif

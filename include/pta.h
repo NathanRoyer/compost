@@ -66,6 +66,7 @@ typedef struct {
 	pta_type_t * szt;
 	pta_type_t * chrt;
 	pta_type_t * dht;
+	pta_type_t * art;
 } pta_context_t;
 
 extern pta_context_t pta_setup();
@@ -96,7 +97,6 @@ size_t pta_array_find(pta_obj array, pta_obj item);
 #define PTA_FIELD_POINTER    0b0000001
 #define PTA_FIELD_AUTO_INST  0b0000010
 #define PTA_FIELD_DEPENDENT  0b0000101
-#define PTA_FIELD_ARRAY      0b0010101
 #define PTA_FIELD_MALLOC     0b0100000
 #define PTA_FIELD_REFERENCES 0b1000001
 
@@ -162,6 +162,8 @@ extern size_t pta_dict_count(pta_obj d_refc);
 extern void pta_get_next_index(pta_obj dictionnary, pta_array * index);
 
 // debug.h
+extern void pta_print_regs();
+
 extern size_t pta_print_cstr(pta_array string);
 
 extern void pta_show(pta_obj obj);
