@@ -49,6 +49,10 @@ typedef PTA_STRUCT field_info_b {
 	uint8_t flags;
 } field_info_b_t;
 
+#define CHSZ (sizeof(uint8_t))
+#define GET_FIA(type, i) ((field_info_a_t *)(ARRAY_GET((type)->dfia, CHSZ + sizeof(field_info_a_t), i) + CHSZ))
+#define GET_FIB(type, i) ((field_info_b_t *)(ARRAY_GET((type)->dfib, CHSZ + sizeof(field_info_b_t), i) + CHSZ))
+
 void * pta_get_obj(void * obj);
 
 type_t * pta_type_of(void * obj);

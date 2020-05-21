@@ -292,7 +292,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 	*(dict_t *)pta_get_c_object(stat_f) = (dict_t){ NULL, NULL };
 
 	new_type->paged_size = compute_paged_size(new_type);
-	new_type->allocation = 1;
+	new_type->variants = NULL;
 
 	for (size_t i = 0; i < offsets; i++){
 		*GET_FIA(new_type, i) = (field_info_a_t){ NULL, 0 };

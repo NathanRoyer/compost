@@ -46,31 +46,30 @@ typedef union ptr {
 
 #define CEILDIV(a, b) ((a / b) + ((a % b) != 0))
 
-#define TYPE_BASIC     0b0000000
-#define TYPE_PRIMITIVE 0b0000001
-#define TYPE_INTERNAL  0b0000010
-#define TYPE_MALLOC_F  0b0000100
-#define TYPE_ARRAY     0b0001000
-#define TYPE_CHAR      0b0010000
-#define TYPE_ROOT      0b0100000
-#define TYPE_FIB       0b1000000
+#define TYPE_BASIC     0b00000000
+#define TYPE_PRIMITIVE 0b00000001
+#define TYPE_INTERNAL  0b00000010
+#define TYPE_MALLOC_F  0b00000100
+#define TYPE_ARRAY     0b00001000
+#define TYPE_CHAR      0b00010000
+#define TYPE_ROOT      0b00100000
+#define TYPE_FIB       0b01000000
+#define TYPE_CSTM_FLAG 0b10000000
 
-#define GET_FIA(type, offset) ((field_info_a_t *)(pta_array_get(type->dfia, offset) + sizeof(uint8_t)))
-#define GET_FIB(type, offset) ((field_info_b_t *)(pta_array_get(type->dfib, offset) + sizeof(uint8_t)))
 #define GET_OFFSET_ZONE(type) ((type)->offsets > sizeof(void *) ? (type)->offsets : sizeof(void *))
 
 typedef PTA_STRUCT type {
-	void * dfia;           // field offsets
-	void * dfib;           // real fields
-	size_t object_size;    // 
-	size_t offsets;        // 
-	size_t paged_size;     // 
-	size_t allocation;     // how many pages to allocate at once - not used yet
-	void * dynamic_fields; // name -> field_info_*
-	void * static_fields;  // name -> *
-	void * page_list;
-	void * client_data;
-	uint8_t flags;
+	void * dfia;     // field offsets
+	void * dfib;     // real fields
+	size_t object_size;     // 
+	size_t offsets;         // 
+	size_t paged_size;      // 
+	void * variants; // how many pages to allocate at once - not used yet
+	void * dynamic_fields;  // name -> field_info_*
+	void * static_fields;   // name -> *
+	void * page_list;       // 
+	void * client_data;     // 
+	uint8_t flags;          // 
 } type_t;
 
 uint8_t fake_type_go_back;

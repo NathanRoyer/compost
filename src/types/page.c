@@ -156,7 +156,7 @@ void * pta_spot_array_dependent(void * destination, type_t * type, size_t capaci
  */
 void * pta_array_get(array_obj_t * array_obj, size_t index){
 	type_t * type = pta_get_c_object(array_obj->content_type);
-	return (void *)array_obj + sizeof(array_obj_t) + (index * (type->object_size + type->offsets));
+	return ARRAY_GET(array_obj, type->object_size + type->offsets, index);
 }
 
 size_t pta_array_find(array_obj_t * array_obj, void * item){

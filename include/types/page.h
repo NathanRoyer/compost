@@ -43,6 +43,8 @@ size_t page_rel_mask;
 size_t page_mask;
 size_t pta_pages;
 
+#define ARRAY_GET(obj, item_size, i) ((void *)((array_obj_t *)(obj) + 1) + (item_size) * (i))
+
 #define PG_REFC2(desc) ((void *)(PP(desc).s + sizeof(page_desc_t)))
 #define PG_TYPE2(desc) ((type_t *)((desc)->type.p))
 #define PG_NEXT(desc)  ((page_desc_t *)((desc)->next.p))
