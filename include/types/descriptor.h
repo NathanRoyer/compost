@@ -39,13 +39,13 @@ size_t reg_last_part_bits;
 
 #define PAGE_BASIC     0b0000
 #define PAGE_DEPENDENT 0b0001
-#define PAGE_ARRAY     -DONT- // 0b0010
 
 typedef struct page_desc {
 	ptr_t type;
 	ptr_t next;
 	ptr_t flags_and_limit;
 } page_desc_t;
+// USE MACRO FUNCTIONS IN PAGE.H TO ACCESS THESE FIELDS
 
 void compute_regs_config();
 

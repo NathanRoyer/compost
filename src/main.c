@@ -61,6 +61,7 @@ int main(int argc, char *argv[]){
 	pta_dict_set_pa(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
 	pta_dict_set_pa(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
 	pta_dict_set_pa(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
+	pta_dict_set_pa(variables, pta_const_array("array_t"), pta_get_obj(ctx.art));
 
 	bool running = true;
 	while (running){
@@ -74,7 +75,7 @@ int main(int argc, char *argv[]){
 		} else if (CMD("fields")){
 			void * var = get_var(arg);
 			if (var){
-				if (pta_type_of(var) == ctx.rt){
+				if (pta_type_of(var, true) == ctx.rt){
 					pta_print_fields(NULL, pta_get_c_object(var));
 				} else {
 					pta_print_fields(var, NULL);
@@ -86,7 +87,7 @@ int main(int argc, char *argv[]){
 			if (instance_name.length){
 				void * type = get_var(type_name);
 				if (type){
-					if (pta_type_of(type) == ctx.rt){
+					if (pta_type_of(type, true) == ctx.rt){
 						pta_type_t * var_t = pta_get_c_object(type);
 						void * new_var = pta_prepare(pta_spot(var_t), var_t);
 						printf("spotted\n");
@@ -95,7 +96,7 @@ int main(int argc, char *argv[]){
 					} else {
 						printf("Argument ");
 						pta_print_cstr(type_name);
-						printf(" is not a type: %p, %p.\n", type, pta_type_of(type));
+						printf(" is not a type: %p, %p.\n", type, pta_type_of(type, true));
 					}
 				}
 			} else printf("Invalid variable name.\n");

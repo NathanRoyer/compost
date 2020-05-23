@@ -53,7 +53,7 @@ typedef PTA_STRUCT type {
 	size_t object_size;
 	size_t offsets;
 	size_t paged_size;
-	size_t page_limit;
+	pta_obj variants;
 	pta_obj dynamic_fields;
 	pta_obj static_fields;
 	pta_obj page_list;
@@ -93,6 +93,12 @@ void * pta_array_get(pta_obj array, size_t index);
 size_t pta_array_find(pta_obj array, pta_obj item);
 
 // field.h
+
+typedef struct pta_constraint {
+	size_t field_offset;
+	size_t value;
+} pta_constraint_t;
+
 #define PTA_FIELD_BASIC      0b0000000
 #define PTA_FIELD_POINTER    0b0000001
 #define PTA_FIELD_AUTO_INST  0b0000010
@@ -102,7 +108,11 @@ size_t pta_array_find(pta_obj array, pta_obj item);
 
 extern pta_obj pta_get_obj(pta_obj address);
 
-extern pta_type_t * pta_type_of(pta_obj obj);
+extern pta_obj pta_create_type_variant(pta_type_t * base_type, pta_constraint_t * constraints, size_t len);
+
+extern bool pta_type_mismatch(pta_obj type, pta_obj obj);
+
+extern pta_type_t * pta_type_of(pta_obj obj, bool base_type);
 
 extern void * pta_get_c_object(pta_obj obj);
 

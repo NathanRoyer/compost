@@ -19,12 +19,6 @@
 
 #include "types/field.h"
 
-typedef struct obj_info {
-	size_t offsets_zone;
-	size_t offset;
-	type_t * page_type;
-} obj_info_t;
-
 obj_info_t get_info(void * obj){
 	page_desc_t * desc = get_page_descriptor(obj);
 	type_t * type = PG_TYPE2(desc);
@@ -57,7 +51,43 @@ void * pta_get_obj(void * address){
 	return address - get_info(address).offset;
 }
 
+type_t * strip_variant(type_t * obj){
+	bool is_variant = PG_TYPE2(get_page_descriptor(obj))->flags & TYPE_ARRAY;
+	return is_variant ? *(type_t **)((void *)obj + sizeof(array_obj_t)) : obj;
+}
+
+void * pta_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len){
+	void ** destination = &base_type->variants;
+	while (*destination != NULL){
+		destination = ARRAY_GET(*destination, sizeof(void *), 1);
+	}
+	type_t * szt = &get_root_page(base_type)->szt;
+	array_obj_t * new_var = pta_spot_array_dependent(destination, szt, (len + 1) * 2);
+	constraint_t * slots = ARRAY_GET(new_var, sizeof(void *), 0);
+	slots[0] = (constraint_t){ (size_t)base_type, (size_t)NULL };
+	for (size_t i = 0; i < len; i++){
+		slots[i + 1] = constraints[i];
+	}
+	return (void *)new_var;
+}
+
+bool pta_type_mismatch(type_t * type, void * obj){
+	array_obj_t * variant = (array_obj_t *)type;
+	type_t * base_type = strip_variant(type);
+	bool match = pta_get_obj(base_type) == pta_get_obj(pta_type_of(obj, true));
+	if (match && base_type != type){
+		constraint_t * constraints = (constraint_t *)(variant + 1);
+		obj_info_t info = get_info(obj);
+		for (size_t i = 1, j = 2; j < variant->capacity && match; j += 2){
+			size_t * location = (size_t *)advance_obj_ptr(obj, info, constraints[i].field_offset, true);
+			match = constraints[i].value == *location;
+		}
+	}
+	return !match;
+}
+
 /* type_of (pointer obj)
+ * note; outdated documentation
  *
  * This function tells the type of a paged object.
  * How it works:
@@ -65,7 +95,7 @@ void * pta_get_obj(void * address){
  * offset from this base in the field_infos_* arrays of the type.
  * Return value: a type pointer (as a C object, not as a paged object)
  */
-type_t * pta_type_of(void * obj){
+type_t * pta_type_of(void * obj, bool base_type){
 	type_t * field_type;
 	obj_info_t info = get_info(obj);
 
@@ -81,7 +111,7 @@ type_t * pta_type_of(void * obj){
 			field_type = fib->field_type;
 		} while (field_type == GO_BACK);
 	}
-	return field_type;
+	return base_type ? strip_variant(field_type) : field_type;
 }
 
 /* get_c_object (pointer obj)
@@ -111,7 +141,7 @@ void zero(void * addr, size_t sz, char value){
 	for (size_t i = 0; i < sz; i++) *(char *)(addr + i) = value;
 }
 void * pta_prepare(void * obj, type_t * type){
-	if (type == NULL) type = pta_type_of(obj);
+	if (type == NULL) type = pta_type_of(obj, true);
 	void * obj_c = pta_get_c_object(obj);
 	bool unprotect = pta_protect(obj);
 
@@ -126,7 +156,7 @@ void * pta_prepare(void * obj, type_t * type){
 				void * field = pta_get_field(obj, str);
 				// printf(" (%p) is being prepared.\n", field);
 				if (field){
-					type_t * field_type = pta_type_of(field);
+					type_t * field_type = pta_type_of(field, true);
 					if (field_type != NULL){
 						size_t should_zero = 0;
 
@@ -246,13 +276,13 @@ void check_references(void ** refc, recursive_call_t * rec){
 
 void reset_fields(void * c_object, type_t * type){
 	for (size_t i = 0; i < type->object_size; i++){
-		field_info_b_t * fib = GET_FIB(type, i);
+		uint8_t flags = GET_FIB(type, i)->flags;
 		void * field = c_object + i;
-		if ((fib->flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(find_raw_refc(c_object), field);
-		else if ((fib->flags & FIBF_MALLOC) && (*(void **)field != NULL)){
+		if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(find_raw_refc(c_object), field);
+		else if ((flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 			*(void **)field = NULL;
-		} else if ((fib->flags & FIBF_REFERENCES) && (*(void **)field != NULL)){
+		} else if ((flags & FIBF_REFERENCES) && (*(void **)field != NULL)){
 			pta_clear_reference(field);
 		}
 	}
@@ -361,9 +391,10 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
  * Return value: the size of the created field (sizeof(void *) for pointers)
  */
 size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array field_name, size_t fib_offset, uint8_t flags){
-	bool nested = !(field_type->flags & TYPE_PRIMITIVE) && !(flags & FIBF_POINTER);
+	type_t * stripped_ft = strip_variant(field_type);
+	bool nested = !(stripped_ft->flags & TYPE_PRIMITIVE) && !(flags & FIBF_POINTER);
 
-	size_t field_size = field_type->object_size;
+	size_t field_size = stripped_ft->object_size;
 	void * field_info;
 	field_info_b_t * fib;
 
@@ -371,16 +402,16 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 		field_info = find_and_fill_fia(host_type, field_type, fib_offset);
 		// pta_print_cstr(field_name);
 		// printf(" (%li) - nested at %li\n", fib_offset, offset_from_refc);
-		if (field_type->offsets > 1){
-			for (size_t i = 1; i < field_type->offsets; i++){
-				field_info_a_t * fia = GET_FIA(field_type, i);
+		if (stripped_ft->offsets > 1){
+			for (size_t i = 1; i < stripped_ft->offsets; i++){
+				field_info_a_t * fia = GET_FIA(stripped_ft, i);
 				find_and_fill_fia(host_type, fia->field_type, fia->data_offset + fib_offset);
 			}
 		}
 
 		size_t ref_fields_count = 0;
-		for (size_t i = 0; i < field_type->object_size; i++){
-			fib = GET_FIB(field_type, i);
+		for (size_t i = 0; i < stripped_ft->object_size; i++){
+			fib = GET_FIB(stripped_ft, i);
 			if (fib->flags & FIBF_PREV_OWNER){
 				ref_fields_count--;
 				field_size -= sizeof(void *);
@@ -430,7 +461,19 @@ uint8_t pta_get_flags(void * obj){
 	return result;
 }
 
+void * advance_obj_ptr(void * obj, obj_info_t info, size_t field_offset, bool is_fib){
+	if (is_fib){
+		field_offset += info.offsets_zone;
+		if (info.offset > 0 && info.offset < info.page_type->offsets){
+			field_offset += GET_FIA(info.page_type, info.offset)->data_offset;
+		}
+	} else field_offset += info.offset;
+
+	return ((void *)pta_get_obj(obj) + field_offset);
+}
+
 /* pta_get_field (object pointer obj, string field_name)
+ * note: deprecated documentation
  *
  * This function gives a field's address given an object address
  * and a field name. It took *three days* to get it to work.
@@ -441,21 +484,12 @@ void * pta_get_field(void * obj, array field_name){
 		obj = *(void **)obj;
 		if (!obj) return NULL;
 	}
-	obj_info_t info = get_info(obj);
-	type_t * field_type = pta_type_of(obj);
 
+	type_t * field_type = pta_type_of(obj, true);
 	void * field_info = pta_dict_get_pa(field_type->dynamic_fields, field_name);
-	type_t * field_info_type = pta_type_of(field_info);
-	bool fib = field_info_type->flags & TYPE_FIB;
-	size_t new_offset = pta_array_find(fib ? field_type->dfib : field_type->dfia, field_info);
+	bool is_fib = pta_type_of(field_info, true)->flags & TYPE_FIB;
+	size_t new_offset = pta_array_find(is_fib ? field_type->dfib : field_type->dfia, field_info);
 
-	if (fib){
-		new_offset += info.offsets_zone;
-		if (info.offset > 0 && info.offset < info.page_type->offsets){
-			new_offset += GET_FIA(info.page_type, info.offset)->data_offset;
-		}
-	} else new_offset += info.offset;
-
-	return ((void *)pta_get_obj(obj) + new_offset);
+	return advance_obj_ptr(obj, get_info(obj), new_offset, is_fib);
 }
 

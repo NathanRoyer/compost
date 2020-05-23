@@ -129,7 +129,7 @@ size_t pta_array_capacity(array_obj_t * array_obj){
 void * pta_spot_array_internal(type_t * type, size_t capacity, uint8_t flags){
 	size_t array_bytes = capacity * (type->object_size + type->offsets);
 	array_obj_t * array_obj = spot_internal(&get_root_page(type)->art, flags, array_bytes);
-	array_obj->content_type = type;
+	array_obj->content_type = pta_get_obj(type);
 	array_obj->capacity = capacity;
 	return (void *)array_obj;
 }

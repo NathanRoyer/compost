@@ -49,13 +49,28 @@ typedef PTA_STRUCT field_info_b {
 	uint8_t flags;
 } field_info_b_t;
 
+typedef struct constraint {
+	size_t field_offset;
+	size_t value;
+} constraint_t;
+
+typedef struct obj_info {
+	size_t offsets_zone;
+	size_t offset;
+	type_t * page_type;
+} obj_info_t;
+
 #define CHSZ (sizeof(uint8_t))
 #define GET_FIA(type, i) ((field_info_a_t *)(ARRAY_GET((type)->dfia, CHSZ + sizeof(field_info_a_t), i) + CHSZ))
 #define GET_FIB(type, i) ((field_info_b_t *)(ARRAY_GET((type)->dfib, CHSZ + sizeof(field_info_b_t), i) + CHSZ))
 
 void * pta_get_obj(void * obj);
 
-type_t * pta_type_of(void * obj);
+void * pta_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len);
+
+bool pta_type_mismatch(type_t * variant, void * obj);
+
+type_t * pta_type_of(void * obj, bool base_type);
 
 void * pta_get_c_object(void * obj);
 
@@ -86,6 +101,8 @@ size_t pta_set_dynamic_field(type_t * type, type_t * field_type, array field_nam
 uint8_t pta_get_flags(void * obj);
 
 #define pta_is_pointer(obj) (pta_get_flags(obj) & FIBF_POINTER)
+
+void * advance_obj_ptr(void * obj, obj_info_t info, size_t field_offset, bool is_fib);
 
 void * pta_get_field(void * obj, array field_name);
 

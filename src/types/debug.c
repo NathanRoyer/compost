@@ -76,7 +76,7 @@ void load_fields(uint8_t flags){
 void pta_print_fields(void * obj, type_t * type){
 	void * refc = obj ? pta_get_obj(obj) : NULL;
 	if (!obj) obj = (void *)-1;
-	if (type == NULL) type = pta_type_of(refc);
+	if (type == NULL) type = pta_type_of(refc, true);
 	printf("\n+- Field Info A -------------------+\n| OFST |        TYPE        | DEST |\n");
 	printf("+------+--------------------+------+\n");
 	for (size_t i = 0; i < type->offsets; i++){
@@ -156,7 +156,7 @@ size_t print_value(void * object, size_t size){
 void show_fields(void * obj, size_t recursion){
 	// sleep(1);
 	if (obj == NULL) return (void) printf(" (NULL)\n");
-	type_t * type = pta_type_of(obj);
+	type_t * type = pta_type_of(obj, true);
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
 		printf(" = ");
@@ -170,7 +170,7 @@ void show_fields(void * obj, size_t recursion){
 	} else {
 		if (pta_is_pointer(obj)){
 			obj = *(void **)obj;
-			type = pta_type_of(obj);
+			type = pta_type_of(obj, true);
 		}
 		if (recursion) putchar('\n');
 		array str = { -1, NULL };
