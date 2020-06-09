@@ -43,6 +43,7 @@ typedef union ptr {
 } ptr_t;
 #define SP(v) ((ptr_t){ .s = (size_t)(v) })
 #define PP(v) ((ptr_t){ .p = (ptr_t *)(v) })
+#define PTRSZ sizeof(void *)
 #define PTR_BITS (sizeof(void *) * 8)
 
 #define CEILDIV(a, b) ((a / b) + ((a % b) != 0))
