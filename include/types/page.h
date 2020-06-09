@@ -1,5 +1,5 @@
 /*
- * LibPTA instances storage features, C header
+ * Compost instances storage features, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,14 +24,14 @@
 #include <unistd.h>
 #include "type.h"
 
-typedef PTA_STRUCT array_obj array_obj_t;
-typedef PTA_STRUCT root_page root_page_t;
+typedef COMPOST_STRUCT array_obj array_obj_t;
+typedef COMPOST_STRUCT root_page root_page_t;
 
 #include "refc.h"
 #include "field.h"
 #include "descriptor.h"
 
-typedef PTA_STRUCT array_obj {
+typedef COMPOST_STRUCT array_obj {
 	void * refc;
 	array_obj_t * next;
 	void * content_type;
@@ -41,7 +41,7 @@ typedef PTA_STRUCT array_obj {
 size_t page_size;
 size_t page_rel_mask;
 size_t page_mask;
-size_t pta_pages;
+size_t compost_pages;
 
 #define ARRAY_GET(obj, item_size, i) ((void *)((array_obj_t *)(obj) + 1) + (item_size) * (i))
 
@@ -52,23 +52,21 @@ size_t pta_pages;
 #define PG_RAW_LIMIT(desc) ((desc)->flags_and_limit.s & page_mask)
 #define PG_LIMIT(desc, type) (PG_RAW_LIMIT(desc) - (type)->paged_size + 1)
 
-void * pta_spot(type_t * type);
+void * compost_spot(type_t * type);
 
-void * pta_spot_dependent(void * destination, type_t * type);
+void * compost_spot_dependent(void * destination, type_t * type);
 
-void * pta_spot_array(type_t * type, size_t size);
+void * compost_spot_array(type_t * type, size_t size);
 
-void * pta_spot_array_dependent(void * destination, type_t * type, size_t size);
+void * compost_spot_array_dependent(void * destination, type_t * type, size_t size);
 
 void shrink_array(page_desc_t * desc, array_obj_t * array_obj, size_t array_bytes);
 
 void grow_array(page_desc_t * desc, array_obj_t * array_obj);
 
-size_t pta_array_capacity(array_obj_t * array_obj);
+void * compost_array_get(array_obj_t * array_obj, size_t index);
 
-void * pta_array_get(array_obj_t * array_obj, size_t index);
-
-size_t pta_array_find(array_obj_t * array_obj, void * item);
+size_t compost_array_find(array_obj_t * array_obj, void * item);
 
 size_t page_occupied_slots(size_t pg_limit, uint8_t flags, void * first_instance, type_t * type);
 
@@ -76,7 +74,7 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 
 root_page_t * get_root_page(void * obj);
 
-typedef PTA_STRUCT root_page {
+typedef COMPOST_STRUCT root_page {
 	page_desc_t header;
 
 	refc_t rt_refc; // root type

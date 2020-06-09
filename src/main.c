@@ -1,5 +1,5 @@
 /*
- * LibPTA debugging console, C source
+ * Compost debugging console, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,27 +21,27 @@
 #include <string.h>
 #include <readline/readline.h>
 #include <stdlib.h>
-#include "pta.h"
+#include "compost.h"
 
 #define CMD(actual) (strcmp(cmd, actual) == 0)
-#define cstrarray(string) ((pta_array){ strlen(string), string })
+#define cstrarray(string) ((compost_array){ strlen(string), string })
 
 void * variables;
 
 #define L(a) a.length
 
-void * get_var(pta_array arg){
+void * get_var(compost_array arg){
 	void * var = NULL;
 	if (arg.data == NULL) printf("This command requires an argument.\n");
 	else {
-		var = pta_dict_get_pa(variables, arg);
+		var = compost_dict_get_pa(variables, arg);
 		if (var == NULL) printf("Variable not found: \"%s\".\n", arg.data);
 	}
 	return var;
 }
 
-pta_array next_arg(pta_array * cmd){
-	pta_array arg = { 0, NULL };
+compost_array next_arg(compost_array * cmd){
+	compost_array arg = { 0, NULL };
 	for (int i = 0; i < cmd->length; i++){
 		if (cmd->data[i] == ' '){
 			cmd->data[i] = '\0';
@@ -54,54 +54,54 @@ pta_array next_arg(pta_array * cmd){
 }
 
 int main(int argc, char *argv[]){
-	pta_context_t ctx = pta_setup();
-	variables = pta_prepare(pta_spot(ctx.dht), ctx.dht);
-	pta_protect(variables);
-	pta_dict_set_pa(variables, pta_const_array("type_t"), pta_get_obj(ctx.rt));
-	pta_dict_set_pa(variables, pta_const_array("size_t"), pta_get_obj(ctx.szt));
-	pta_dict_set_pa(variables, pta_const_array("char_t"), pta_get_obj(ctx.chrt));
-	pta_dict_set_pa(variables, pta_const_array("dict_t"), pta_get_obj(ctx.dht));
-	pta_dict_set_pa(variables, pta_const_array("array_t"), pta_get_obj(ctx.art));
+	compost_context_t ctx = compost_setup();
+	variables = compost_prepare(compost_spot(ctx.dht), ctx.dht);
+	compost_protect(variables);
+	compost_dict_set_pa(variables, compost_const_array("type_t"), compost_get_obj(ctx.rt));
+	compost_dict_set_pa(variables, compost_const_array("size_t"), compost_get_obj(ctx.szt));
+	compost_dict_set_pa(variables, compost_const_array("char_t"), compost_get_obj(ctx.chrt));
+	compost_dict_set_pa(variables, compost_const_array("dict_t"), compost_get_obj(ctx.dht));
+	compost_dict_set_pa(variables, compost_const_array("array_t"), compost_get_obj(ctx.art));
 
 	bool running = true;
 	while (running){
 		char * cmd = readline("> ");
-		pta_array arg = next_arg(&cstrarray(cmd));
+		compost_array arg = next_arg(&cstrarray(cmd));
 
 		if (CMD("exit")) running = false;
 		else if (CMD("show")){
 			void * var = get_var(arg);
-			if (var) pta_show(var);
+			if (var) compost_show(var);
 		} else if (CMD("fields")){
 			void * var = get_var(arg);
 			if (var){
-				if (pta_type_of(var, true) == ctx.rt){
-					pta_print_fields(NULL, pta_get_c_object(var));
+				if (compost_type_of(var, true) == ctx.rt){
+					compost_print_fields(NULL, compost_get_c_object(var));
 				} else {
-					pta_print_fields(var, NULL);
+					compost_print_fields(var, NULL);
 				}
 			}
 		} else if (CMD("new")){
-			pta_array type_name = arg;
-			pta_array instance_name = next_arg(&type_name);
+			compost_array type_name = arg;
+			compost_array instance_name = next_arg(&type_name);
 			if (instance_name.length){
 				void * type = get_var(type_name);
 				if (type){
-					if (pta_type_of(type, true) == ctx.rt){
-						pta_type_t * var_t = pta_get_c_object(type);
-						void * new_var = pta_prepare(pta_spot(var_t), var_t);
+					if (compost_type_of(type, true) == ctx.rt){
+						compost_type_t * var_t = compost_get_c_object(type);
+						void * new_var = compost_prepare(compost_spot(var_t), var_t);
 						printf("spotted\n");
-						pta_dict_set_pa(variables, instance_name, new_var);
-						pta_protect(new_var);
+						compost_dict_set_pa(variables, instance_name, new_var);
+						compost_protect(new_var);
 					} else {
 						printf("Argument ");
-						pta_print_cstr(type_name);
-						printf(" is not a type: %p, %p.\n", type, pta_type_of(type, true));
+						compost_print_cstr(type_name);
+						printf(" is not a type: %p, %p.\n", type, compost_type_of(type, true));
 					}
 				}
 			} else printf("Invalid variable name.\n");
 		} else if (CMD("type")){
-			pta_array new_type_name = arg;
+			compost_array new_type_name = arg;
 			if (new_type_name.length){
 
 				char * object_size_str = readline("object size ? ");
@@ -109,18 +109,18 @@ int main(int argc, char *argv[]){
 				char * referencers_str = readline("referencers ? ");
 				size_t referencers = atoi(referencers_str);
 				printf("referencers: %li\n", referencers);
-				void * new_type_refc = pta_create_type(ctx.szt, atoi(offsets_str), referencers, atoi(object_size_str), PTA_TYPE_BASIC);
+				void * new_type_refc = compost_create_type(ctx.szt, atoi(offsets_str), referencers, atoi(object_size_str), COMPOST_TYPE_BASIC);
 				free(referencers_str);
 				free(offsets_str);
 				free(object_size_str);
 
 				printf("New type: ");
-				pta_print_cstr(new_type_name);
+				compost_print_cstr(new_type_name);
 				printf(", %p\n", new_type_refc);
-				pta_protect(new_type_refc);
-				pta_dict_set_pa(variables, new_type_name, new_type_refc);
+				compost_protect(new_type_refc);
+				compost_dict_set_pa(variables, new_type_name, new_type_refc);
 
-				pta_type_t * new_type = pta_get_c_object(new_type_refc);
+				compost_type_t * new_type = compost_get_c_object(new_type_refc);
 				size_t field_offset = 0;
 
 				printf("Specify the fields :\n");
@@ -128,20 +128,20 @@ int main(int argc, char *argv[]){
 				for (;;){
 					char * type_name_cstr = readline("T: ");
 					if (strcmp(type_name_cstr, "end") == 0) break;
-					pta_array type_name = cstrarray(type_name_cstr);
-					pta_array field_name = next_arg(&type_name);
+					compost_array type_name = cstrarray(type_name_cstr);
+					compost_array field_name = next_arg(&type_name);
 					bool is_pointer = strcmp(type_name.data, "distant") == 0;
 					if (is_pointer){
 						type_name = field_name;
 						field_name = next_arg(&type_name);
 					}
 
-					uint8_t flags = is_pointer ? (PTA_FIELD_POINTER | PTA_FIELD_DEPENDENT | PTA_FIELD_AUTO_INST) : PTA_FIELD_BASIC;
+					uint8_t flags = is_pointer ? (COMPOST_FIELD_POINTER | COMPOST_FIELD_DEPENDENT | COMPOST_FIELD_AUTO_INST) : COMPOST_FIELD_BASIC;
 
 					void * type_refc = get_var(type_name);
-					pta_type_t * field_type = pta_get_c_object(type_refc);
+					compost_type_t * field_type = compost_get_c_object(type_refc);
 					if (field_type){
-						field_offset += pta_set_dynamic_field(new_type, field_type, field_name, field_offset, flags);
+						field_offset += compost_set_dynamic_field(new_type, field_type, field_name, field_offset, flags);
 					}
 
 					free(type_name_cstr);
@@ -154,8 +154,8 @@ int main(int argc, char *argv[]){
 			printf("new TYPE VARIABLE    create a new instance of a type\n");
 			printf("type NEW_TYPE        create a new type\n");
 		} else if (CMD("pages")){
-			printf("%lu pages\n", pta_pages);
-			pta_print_regs();
+			printf("%lu pages\n", compost_pages);
+			compost_print_regs();
 		} else if (!CMD("")) printf("Unknown command: \"%s\".\n", cmd);
 		free(cmd);
 	}

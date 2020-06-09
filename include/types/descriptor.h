@@ -1,5 +1,5 @@
 /*
- * LibPTA pages descriptors, C header
+ * Compost pages descriptors, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify

@@ -1,5 +1,5 @@
 /*
- * LibPTA instances storage features, C source
+ * Compost instances storage features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 size_t page_size;
 size_t page_rel_mask;
 size_t page_mask;
-size_t pta_pages = 0;
+size_t compost_pages = 0;
 
 // called automatically before main, to get page_size from the system cfg :
 __attribute__((constructor))
@@ -35,7 +35,7 @@ void get_system_paging_config(){
 
 void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 	page_desc_t * desc = type->page_list;
-	bool array_f = array_bytes != 0;
+	bool array_f = type->flags & TYPE_ARRAY;
 	while (true){
 		if (desc == NULL){
 			size_t contig_pages;
@@ -53,16 +53,21 @@ void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 			}
 
 			type->page_list = desc;
-			pta_pages += contig_pages;
+			compost_pages += contig_pages;
 		} else {
 			size_t pg_limit = PG_LIMIT(desc, type);
 			if (flags == PG_FLAGS(desc)){
 				for (array_obj_t * refc = PG_REFC2(desc); refc && PP(refc).s < pg_limit; ){
 					if (!is_obj_referenced(refc)){
+						if (refc->refc){
+							// reset_fields(compost_get_c_object(refc->refc), compost_type_of(refc->refc, true));
+							printf("\nCompost anomaly: is_obj_referenced() has not cleared the referenced count\n");
+							raise(SIGABRT);
+						}
 						if (array_f) grow_array(desc, refc);
 						if ((!array_f) || refc->capacity >= array_bytes){
 							if (array_f) shrink_array(desc, refc, array_bytes);
-							else reset_fields(pta_get_c_object(refc), type);
+							else reset_fields(compost_get_c_object(refc), type);
 							return refc;
 						} else if (array_f) refc->capacity = 0;
 					}
@@ -75,24 +80,24 @@ void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 	}
 }
 
-void * pta_spot(type_t * type){
+void * compost_spot(type_t * type){
 	return spot_internal(type, PAGE_BASIC, 0);
 }
 
-void * pta_spot_dependent(void * destination, type_t * type){
+void * compost_spot_dependent(void * destination, type_t * type){
 	void ** new_spot;
-	uint8_t flags = pta_get_flags(destination);
+	uint8_t flags = compost_get_flags(destination);
 	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
 		new_spot = spot_internal(type, PAGE_DEPENDENT, 0);
-		attach_field(pta_get_obj(destination), destination, new_spot);
+		attach_field(compost_get_obj(destination), destination, new_spot);
 	} else new_spot = NULL;
 	return new_spot;
 }
 
 void reset_array(array_obj_t * array_obj){
-	type_t * type = pta_get_c_object(array_obj->content_type);
+	type_t * type = compost_get_c_object(array_obj->content_type);
 	for (size_t i = 0; i < array_obj->capacity; i++){
-		void * c_object = pta_array_get(array_obj, i);
+		void * c_object = compost_array_get(array_obj, i);
 		reset_fields(c_object + type->offsets, type);
 	}
 }
@@ -122,27 +127,23 @@ void shrink_array(page_desc_t * desc, array_obj_t * array_obj, size_t array_byte
 	}
 }
 
-size_t pta_array_capacity(array_obj_t * array_obj){
-	return array_obj->capacity;
-}
-
-void * pta_spot_array_internal(type_t * type, size_t capacity, uint8_t flags){
+void * compost_spot_array_internal(type_t * type, size_t capacity, uint8_t flags){
 	size_t array_bytes = capacity * (type->object_size + type->offsets);
 	array_obj_t * array_obj = spot_internal(&get_root_page(type)->art, flags, array_bytes);
-	array_obj->content_type = pta_get_obj(type);
+	array_obj->content_type = compost_get_obj(type);
 	array_obj->capacity = capacity;
 	return (void *)array_obj;
 }
 
-void * pta_spot_array(type_t * type, size_t capacity){
-	return pta_spot_array_internal(type, capacity, PAGE_BASIC);
+void * compost_spot_array(type_t * type, size_t capacity){
+	return compost_spot_array_internal(type, capacity, PAGE_BASIC);
 }
 
-void * pta_spot_array_dependent(void * destination, type_t * type, size_t capacity){
-	void ** new_spot;
-	uint8_t flags = pta_get_flags(destination);
+void * compost_spot_array_dependent(void * destination, type_t * type, size_t capacity){
+	void * new_spot;
+	uint8_t flags = compost_get_flags(destination);
 	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
-		new_spot = pta_spot_array_internal(type, capacity, PAGE_DEPENDENT);
+		new_spot = compost_spot_array_internal(type, capacity, PAGE_DEPENDENT);
 		attach_field(find_raw_refc(destination), destination, new_spot);
 	} else new_spot = NULL;
 	return new_spot;
@@ -154,13 +155,13 @@ void * pta_spot_array_dependent(void * destination, type_t * type, size_t capaci
  * Finds the instance at the specified index in the specified array.
  * Return value: pointer to an instance of the array' contained type
  */
-void * pta_array_get(array_obj_t * array_obj, size_t index){
-	type_t * type = pta_get_c_object(array_obj->content_type);
+void * compost_array_get(array_obj_t * array_obj, size_t index){
+	type_t * type = compost_get_c_object(array_obj->content_type);
 	return ARRAY_GET(array_obj, type->object_size + type->offsets, index);
 }
 
-size_t pta_array_find(array_obj_t * array_obj, void * item){
-	type_t * type = pta_get_c_object(array_obj->content_type);
+size_t compost_array_find(array_obj_t * array_obj, void * item){
+	type_t * type = compost_get_c_object(array_obj->content_type);
 	array_obj += 1; // advance to content
 	return (PP(item).s - PP(array_obj).s) / (type->object_size + type->offsets);
 }
@@ -202,7 +203,7 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 
 		if (should_delete && page_occupied_slots(pg_limit, flags, first_instance, type) == 0){
 			size_t bytes = PG_RAW_LIMIT(desc) - PP(desc).s;
-			pta_pages -= bytes / page_size;
+			compost_pages -= bytes / page_size;
 			munmap(desc, bytes);
 			desc = next_desc;
 		} else {
@@ -214,13 +215,14 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 				if (type->flags & TYPE_ARRAY){
 					if (unreferenced){
 						for (size_t i = 0; i < refc->capacity; i++){
-							void * c_object = pta_array_get(refc, i);
-							reset_fields(c_object + type->offsets, type);
+							void * c_object = compost_array_get(refc, i);
+							type_t * content_type = compost_get_c_object(refc->content_type);
+							reset_fields(c_object + content_type->offsets, content_type);
 						}
 					}
 					refc = refc->next;
 				} else {
-					if (unreferenced) reset_fields(pta_get_c_object(refc), type);
+					if (unreferenced) reset_fields(compost_get_c_object(refc), type);
 					refc = (array_obj_t *)(PP(refc).s + type->paged_size);
 				}
 			}

@@ -1,5 +1,5 @@
 /*
- * LibPTA pages descriptors, C source
+ * Compost pages descriptors, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -43,7 +43,7 @@ void compute_regs_config(){
 	reg_last_part_bits = PTR_BITS - ((PTR_BITS - page_relative_bits) % reg_part_bits);
 	for (reg_i_bits = 0; (PTR_BITS - 1) >> reg_i_bits; reg_i_bits++);
 	if (reg_i_bits >= page_relative_bits){
-		printf("Critical error: This system\'s paging configuration is not compatible with LibPTA.\n");
+		printf("Critical error: This system\'s paging configuration is not compatible with Compost.\n");
 		exit(1);
 	}
 	reg_md_bits = page_relative_bits - reg_i_bits;
@@ -86,7 +86,7 @@ void set_reg_metadata(ptr_t reg, ptr_t metadata){
 	}
 }
 
-page_desc_t * get_page_descriptor(void * address){
+page_desc_t * get_page_descriptor_raw(void * address){
 	ptr_t reg = SP(first_reg.s & page_mask);
 	size_t i = first_reg.s & reg_i_mask;
 	while (reg.p != NULL){
@@ -96,6 +96,15 @@ page_desc_t * get_page_descriptor(void * address){
 		reg.s &= page_mask;
 	}
 	return (page_desc_t *)(reg.s & page_mask);
+}
+
+page_desc_t * get_page_descriptor(void * address){
+	page_desc_t * desc = get_page_descriptor_raw(address);
+	if (desc == NULL){
+		printf("\nCompost anomaly: external page (%p)\n", address);
+		raise(SIGABRT);
+	}
+	return desc;
 }
 
 void set_page_descriptor(ptr_t address, page_desc_t * desc){
@@ -116,7 +125,7 @@ void set_page_descriptor(ptr_t address, page_desc_t * desc){
 	} while (reg_ct.p != NULL);
 
 	if (i > page_relative_bits){
-		printf("LibPTA : new register (%lu)\n", i);
+		printf("Compost: new register (%lu)\n", i);
 		if (reg_ct.p != NULL){
 			ptr_t bck = reg_ct;
 			ptr_t intermediate = new_random_page(1);

@@ -1,5 +1,5 @@
 /*
- * LibPTA garbage collection features, C header
+ * Compost garbage collection features, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,20 +37,22 @@ typedef struct recursive_call {
 
 void ** find_raw_refc(void * address);
 
-void * pta_get_final_obj(void * address);
+void * compost_get_final_obj(void * address);
 
 void ** find_refc(void * address, recursive_call_t * rec);
 
 bool is_obj_referenced(void * obj);
 
-bool pta_protect(void * obj);
+bool compost_protect(void * obj);
 
-void pta_unprotect(void * obj);
+bool is_obj_protected(void * obj);
 
-int pta_type_instances(type_t * type);
+void compost_unprotect(void * obj);
 
-void pta_remove_superfluous_pages(type_t * type, bool should_delete);
+int compost_type_instances(type_t * type);
 
-void pta_garbage_collect(type_t * root_type);
+void compost_remove_superfluous_pages(type_t * type, bool should_delete);
+
+void compost_garbage_collect(type_t * root_type);
 
 #endif

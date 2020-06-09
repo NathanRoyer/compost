@@ -1,5 +1,5 @@
 /*
- * LibPTA setup features, C header
+ * Compost setup features, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,10 +23,11 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <signal.h>
 
-#define PTA_STRUCT struct __attribute__ ((__packed__))
+#define COMPOST_STRUCT struct __attribute__ ((__packed__))
 
-typedef PTA_STRUCT {
+typedef COMPOST_STRUCT {
 	size_t length;
 	char * data;
 } array;
@@ -58,7 +59,7 @@ typedef union ptr {
 
 #define GET_OFFSET_ZONE(type) ((type)->offsets > sizeof(void *) ? (type)->offsets : sizeof(void *))
 
-typedef PTA_STRUCT type {
+typedef COMPOST_STRUCT type {
 	void * dfia;     // field offsets
 	void * dfib;     // real fields
 	size_t object_size;     // 
@@ -83,10 +84,10 @@ typedef struct {
 	type_t * art;
 } context_t;
 
-context_t pta_setup();
+context_t compost_setup();
 
-typedef void (*pta_for_each_type_callback)(void * type_obj, void * arg);
+typedef void (*compost_for_each_type_callback)(void * type_obj, void * arg);
 
-void pta_for_each_type(type_t * root_type, pta_for_each_type_callback cb, void * arg);
+void compost_for_each_type(type_t * root_type, compost_for_each_type_callback cb, void * arg);
 
 #endif

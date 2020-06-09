@@ -1,5 +1,5 @@
 /*
- * LibPTA debugging features, C source
+ * Compost debugging features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,12 +36,12 @@ void print_reg_content(ptr_t reg, size_t recursion, bool explore){
 	}
 }
 
-void pta_print_regs(){
+void compost_print_regs(){
 	reg_cap = reg_mask + 1;
 	print_reg_content(first_reg, 0, true);
 }
 
-size_t pta_print_cstr(array string){
+size_t compost_print_cstr(array string){
 	for (int i = 0; i < string.length; i++) putc(char_at(string, i), stdout);
 	return string.length;
 }
@@ -73,10 +73,10 @@ void load_fields(uint8_t flags){
 	else field_flags_str[i] = '-';
 }
 
-void pta_print_fields(void * obj, type_t * type){
-	void * refc = obj ? pta_get_obj(obj) : NULL;
+void compost_print_fields(void * obj, type_t * type){
+	void * refc = obj ? compost_get_obj(obj) : NULL;
 	if (!obj) obj = (void *)-1;
-	if (type == NULL) type = pta_type_of(refc, true);
+	if (type == NULL) type = compost_type_of(refc, true);
 	printf("\n+- Field Info A -------------------+\n| OFST |        TYPE        | DEST |\n");
 	printf("+------+--------------------+------+\n");
 	for (size_t i = 0; i < type->offsets; i++){
@@ -94,7 +94,7 @@ void pta_print_fields(void * obj, type_t * type){
 	printf("+------+--------------------+------+\n");
 	printf("\n+- Field Info B -------------------+\n| OFST |        TYPE        | FLAG |\n");
 	printf("+------+--------------------+------+\n");
-	refc = pta_get_c_object(refc);
+	refc = compost_get_c_object(refc);
 	for (size_t i = 0; i < type->object_size; i++){
 		field_info_b_t * fib = GET_FIB(type, i);
 		if (refc + i == obj) print_color(0, false);
@@ -156,11 +156,11 @@ size_t print_value(void * object, size_t size){
 void show_fields(void * obj, size_t recursion){
 	// sleep(1);
 	if (obj == NULL) return (void) printf(" (NULL)\n");
-	type_t * type = pta_type_of(obj, true);
+	type_t * type = compost_type_of(obj, true);
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
 		printf(" = ");
-		char * c_obj = pta_get_c_object(obj);
+		char * c_obj = compost_get_c_object(obj);
 		if (type->flags & TYPE_CHAR){
 			putchar('\'');
 			print_char(*c_obj);
@@ -168,20 +168,20 @@ void show_fields(void * obj, size_t recursion){
 		} else print_value(c_obj, type->object_size);
 		putchar('\n');
 	} else {
-		if (pta_is_pointer(obj)){
+		if (compost_is_pointer(obj)){
 			obj = *(void **)obj;
-			type = pta_type_of(obj, true);
+			type = compost_type_of(obj, true);
 		}
 		if (recursion) putchar('\n');
 		array str = { -1, NULL };
 		do {
-			pta_dict_get_next_index(type->dynamic_fields, &str);
+			compost_dict_get_next_index(type->dynamic_fields, &str);
 			if (str.data != NULL){
 				printf("%0*s‣ ", recursion * 3, " ");
-				pta_print_cstr(str);
-				void * field = pta_get_field(obj, str);
+				compost_print_cstr(str);
+				void * field = compost_get_field(obj, str.length, str.data, true);
 				if (field){
-					if (pta_is_pointer(field) && *(void **)field == NULL) printf(" (NULL)\n");
+					if (compost_is_pointer(field) && *(void **)field == NULL) printf(" (NULL)\n");
 					else show_fields(field, recursion + 1);
 				} else printf(" [unr. field]\n");
 			}
@@ -190,10 +190,10 @@ void show_fields(void * obj, size_t recursion){
 	if (type->flags & TYPE_ARRAY){
 		array_obj_t * array_obj = obj;
 		printf("%0*s‣ content: ", recursion * 3, " ");
-		if (((type_t *)pta_get_c_object(array_obj->content_type))->flags & TYPE_CHAR){
+		if (((type_t *)compost_get_c_object(array_obj->content_type))->flags & TYPE_CHAR){
 			putchar('\"');
 			for (size_t i = 0; i < array_obj->capacity; i++){
-				print_char(*(char *)pta_get_c_object(pta_array_get(array_obj, i)));
+				print_char(*(char *)compost_get_c_object(compost_array_get(array_obj, i)));
 			}
 			printf("\"\n");
 		} else {
@@ -201,18 +201,18 @@ void show_fields(void * obj, size_t recursion){
 			recursion++;
 			for (size_t i = 0; i < array_obj->capacity; i++){
 				printf("%0*s• [%li]", recursion * 3, " ", i);
-				show_fields(pta_array_get(array_obj, i), recursion + 1);
+				show_fields(compost_array_get(array_obj, i), recursion + 1);
 			}
 		}
 	}
 }
 
-void pta_show(void * obj){
+void compost_show(void * obj){
 	show_fields(obj, 0);
 }
 
-void pta_show_references(void * obj){
-	void ** orig_refc = pta_get_final_obj(obj);
+void compost_show_references(void * obj){
+	void ** orig_refc = compost_get_final_obj(obj);
 	void ** refc = orig_refc;
 	while (*refc != NULL && *refc != orig_refc){
 		printf("referencer: %p\n", *refc);
@@ -220,13 +220,13 @@ void pta_show_references(void * obj){
 	}
 }
 
-void pta_show_pages(void * any_paged_address){
+void compost_show_pages(void * any_paged_address){
 	root_page_t * rp = get_root_page(any_paged_address);
 	page_desc_t * desc = rp->rt.page_list;
 	while (desc){
 		for (void * refc = PG_REFC2(desc); PP(refc).s < PG_LIMIT(desc, &rp->rt); refc += rp->rt.paged_size){
 			if (*(void **)refc == NULL) continue;
-			type_t * type = pta_get_c_object(refc);
+			type_t * type = compost_get_c_object(refc);
 			printf("Pages of a type with object_size = %li:\n", type->object_size);
 			page_desc_t * page = type->page_list;
 			while (page){

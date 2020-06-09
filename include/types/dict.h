@@ -1,5 +1,5 @@
 /*
- * LibPTA dictionary features, C header
+ * Compost dictionary features, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -22,33 +22,33 @@
 
 #include "type.h"
 
-typedef PTA_STRUCT dict_block dict_block_t;
-typedef PTA_STRUCT dict dict_t;
+typedef COMPOST_STRUCT dict_block dict_block_t;
+typedef COMPOST_STRUCT dict dict_t;
 
 #include "page.h"
 
-typedef PTA_STRUCT dict_block {
+typedef COMPOST_STRUCT dict_block {
 	void * equal; // to next key part
 	void * unequal; // to alternative key part
 	void * value;
 	int8_t key_part;
 } dict_block_t;
 
-typedef PTA_STRUCT dict {
+typedef COMPOST_STRUCT dict {
 	void * first_block;
 	void * empty_key_v;
 } dict_t;
 
-void * pta_dict_get_al(void * d_refc, void * key);
+void * compost_dict_get_al(void * d_refc, void * key);
 
-void * pta_dict_get_pa(void * d_refc, array key);
+void * compost_dict_get_pa(void * d_refc, array key);
 
-void * pta_dict_set_al(void * d_refc, void * key, void * value);
+void * compost_dict_set_al(void * d_refc, void * key, void * value);
 
-void * pta_dict_set_pa(void * d_refc, array key, void * value);
+void * compost_dict_set_pa(void * d_refc, array key, void * value);
 
-size_t pta_dict_count(void * d_refc);
+size_t compost_dict_count(void * d_refc);
 
-void pta_dict_get_next_index(void * d_refc, array * index);
+void compost_dict_get_next_index(void * d_refc, array * index);
 
 #endif

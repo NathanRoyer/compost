@@ -1,5 +1,5 @@
 /*
- * LibPTA debugging features, C header
+ * Compost debugging features, C header
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -28,23 +28,23 @@
 #include "dict.h"
 #include <stdio.h>
 
-typedef PTA_STRUCT dbg_field_info {
+typedef COMPOST_STRUCT dbg_field_info {
 	array name;
 	size_t size;
 	size_t offset;
 	uint8_t flags;
 } dbg_field_info_t;
 
-void pta_print_regs();
+void compost_print_regs();
 
-size_t pta_print_cstr(array string);
+size_t compost_print_cstr(array string);
 
-void pta_print_fields(void * obj, type_t * type);
+void compost_print_fields(void * obj, type_t * type);
 
-void pta_show(void * obj);
+void compost_show(void * obj);
 
-void pta_show_references(void * obj);
+void compost_show_references(void * obj);
 
-void pta_show_pages(void * any_paged_address);
+void compost_show_pages(void * any_paged_address);
 
 #endif

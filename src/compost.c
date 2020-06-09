@@ -1,5 +1,5 @@
 /*
- * LibPTA shared object creation helper, C source
+ * Compost shared object creation helper, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify

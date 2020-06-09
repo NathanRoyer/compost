@@ -1,5 +1,5 @@
 /*
- * LibPTA garbage collection features, C source
+ * Compost garbage collection features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -31,7 +31,7 @@ void ** find_raw_refc(void * address){
 	} else return address - ((PP(address).s - PP(desc + 1).s) % PG_TYPE2(desc)->paged_size);
 }
 
-void * pta_get_final_obj(void * address){
+void * compost_get_final_obj(void * address){
 	// void * bckdbg = address;
 	address = find_raw_refc(address);
 	while ((PG_FLAGS(get_page_descriptor(address)) & PAGE_DEPENDENT) && *(void **)address != NULL && *(void **)address != address){
@@ -41,19 +41,24 @@ void * pta_get_final_obj(void * address){
 }
 
 void ** find_refc(void * address, recursive_call_t * rec){
-	void ** indep_refc = pta_get_final_obj(address);
+	void ** indep_refc = compost_get_final_obj(address);
 	if (*indep_refc != indep_refc) check_references(indep_refc, rec);
 	return indep_refc;
 }
 
-bool pta_protect(void * obj){
+bool compost_protect(void * obj){
 	void ** refc = find_refc(obj, NULL);
 	bool result = (*refc == NULL);
 	if (result) *refc = FAKE_DEPENDENT(refc);
 	return result;
 }
 
-void pta_unprotect(void * obj){
+bool is_obj_protected(void * obj){
+	void ** refc = find_refc(obj, NULL);
+	return *refc == FAKE_DEPENDENT(refc);
+}
+
+void compost_unprotect(void * obj){
 	void ** refc = find_refc(obj, NULL);
 	if (*refc == FAKE_DEPENDENT(refc)) *refc = NULL;
 }
@@ -68,7 +73,7 @@ bool is_obj_referenced(void * obj){
  * Counts all instances of a type accross all its pages.
  * Return value: the total number of instances of the specified type.
  */
-int pta_type_instances(type_t * type){
+int compost_type_instances(type_t * type){
 	int n = 0;
 	for (page_desc_t * desc = type->page_list; desc; desc = PG_NEXT(desc)){
 		n += page_occupied_slots(PG_LIMIT(desc, type), PG_FLAGS(desc), PG_REFC2(desc), type);
@@ -83,7 +88,7 @@ int pta_type_instances(type_t * type){
  * the empty pages (i.e. containing no referenced instances).
  * Return value: none
  */
-void pta_remove_superfluous_pages(type_t * type, bool should_delete){
+void compost_remove_superfluous_pages(type_t * type, bool should_delete){
 	type->page_list = update_page_list(type->page_list, type, should_delete);
 }
 
@@ -94,7 +99,7 @@ void pta_remove_superfluous_pages(type_t * type, bool should_delete){
  * and calls remove_superfluous_pages on them if they have the TYPE_HAS_UNREF flag.
  * Return value: none
  */
-void pta_garbage_collect(type_t * root_type){
+void compost_garbage_collect(type_t * root_type){
 	/*
 	 * TODO : pre-run to subtract independent-references that
 	 * are unreferenced themselves
@@ -106,7 +111,7 @@ void pta_garbage_collect(type_t * root_type){
 			size_t pg_limit = PG_LIMIT(desc, root_type);
 			for (void * refc = PG_REFC2(desc); PP(refc).s < pg_limit; refc += root_type->paged_size){
 				if (*(void **)refc == NULL) continue;
-				pta_remove_superfluous_pages(pta_get_c_object(refc), i > 0);
+				compost_remove_superfluous_pages(compost_get_c_object(refc), i > 0);
 			}
 			desc = PG_NEXT(desc);
 		}

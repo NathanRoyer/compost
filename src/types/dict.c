@@ -1,5 +1,5 @@
 /*
- * LibPTA dictionary features, C source
+ * Compost dictionary features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 
 /*
  * This file contains dictionary-related functions
- * It is pretty high-level in comparison to the rest of LibPTA's source
+ * It is pretty high-level in comparison to the rest of Compost's source
  */
 
 #define IS_DICT_EMPTY(d) (d->first_block == NULL && d->empty_key_v == NULL)
@@ -33,7 +33,7 @@
  * Return value: freshly setup dict_block_t
  */
 void new_dict_block(void * field, root_page_t * rp, int8_t key_part){
-	*(dict_block_t *)pta_get_c_object(pta_spot_dependent(field, &rp->dbt)) = (dict_block_t){ NULL, NULL, NULL, key_part };
+	*(dict_block_t *)compost_get_c_object(compost_spot_dependent(field, &rp->dbt)) = (dict_block_t){ NULL, NULL, NULL, key_part };
 }
 
 /* dict_get(dictionnary d, string key)
@@ -42,29 +42,29 @@ void new_dict_block(void * field, root_page_t * rp, int8_t key_part){
  * held by the dictionnary at this specific key with this function.
  * Return value: the value corresponding to the key
  */
-void * dict_get_internal(void * d_refc, void * al_key, array pa_key){
-	dict_t * d = pta_get_c_object(d_refc);
-	size_t key_length = (al_key == NULL) ? pa_key.length : pta_array_capacity(al_key);
+void * dict_get_internal(void * d_refc, array_obj_t * al_key, array pa_key){
+	dict_t * d = compost_get_c_object(d_refc);
+	size_t key_length = (al_key == NULL) ? pa_key.length : al_key->capacity;
 	if (key_length == 0) return d->empty_key_v;
-	dict_block_t * dblk = pta_get_c_object(d->first_block);
+	dict_block_t * dblk = compost_get_c_object(d->first_block);
 
 	for (int i = 0; dblk != NULL; ){
-		char c = (al_key == NULL) ? pa_key.data[i] : *(char *)pta_array_get(al_key, i);
+		char c = (al_key == NULL) ? pa_key.data[i] : *(char *)compost_array_get(al_key, i);
 		if (dblk->key_part == c){
 			if (++i == key_length) break;
-			else dblk = pta_get_c_object(dblk->equal);
+			else dblk = compost_get_c_object(dblk->equal);
 		} else if (dblk->key_part > c) dblk = NULL;
-		else dblk = pta_get_c_object(dblk->unequal);
+		else dblk = compost_get_c_object(dblk->unequal);
 	}
 
 	return (dblk != NULL && dblk->value != NULL) ? dblk->value : NULL;
 }
 
-void * pta_dict_get_al(void * d_refc, void * key){
+void * compost_dict_get_al(void * d_refc, void * key){
 	return dict_get_internal(d_refc, key, (array){ 0, NULL });
 }
 
-void * pta_dict_get_pa(void * d_refc, array key){
+void * compost_dict_get_pa(void * d_refc, array key){
 	return dict_get_internal(d_refc, NULL, key);
 }
 
@@ -73,62 +73,62 @@ void * pta_dict_get_pa(void * d_refc, array key){
  * This function sets a key-value pair in a dictionnary.
  * Return value: the value parameter
  */
-void * dict_set_internal(void * d_refc, void * key_al, array key_pa, void * value){
-	bool unprotect = pta_protect(d_refc);
+void * dict_set_internal(void * d_refc, array_obj_t * key_al, array key_pa, void * value){
+	bool unprotect = compost_protect(d_refc);
 	root_page_t * rp = get_root_page(d_refc);
 
-	dict_t * d = pta_get_c_object(d_refc);
-	size_t key_length = (key_al == NULL) ? key_pa.length : pta_array_capacity(key_al);
+	dict_t * d = compost_get_c_object(d_refc);
+	size_t key_length = (key_al == NULL) ? key_pa.length : key_al->capacity;
 	char c;
 	void ** value_holder = NULL;
 	if (key_length == 0) value_holder = &d->empty_key_v;
 	else {
-		c = (key_al == NULL) ? key_pa.data[0] : *(char *)pta_array_get(key_al, 0);
+		c = (key_al == NULL) ? key_pa.data[0] : *(char *)compost_array_get(key_al, 0);
 		if (d->first_block == NULL) new_dict_block(&d->first_block, rp, c);
 		void ** dblkp = &d->first_block;
 		void * dblk_refc = *dblkp;
-		dict_block_t * dblk = pta_get_c_object(dblk_refc);
+		dict_block_t * dblk = compost_get_c_object(dblk_refc);
 
 		for (int i = 0; i < key_length && value_holder == NULL; ){
-			c = (key_al == NULL) ? key_pa.data[i] : *(char *)pta_array_get(key_al, i);
+			c = (key_al == NULL) ? key_pa.data[i] : *(char *)compost_array_get(key_al, i);
 			if (dblk->key_part == c){
 				if (++i == key_length) value_holder = &dblk->value;
 				else {
 					// i was just incremented
-					c = (key_al == NULL) ? key_pa.data[i] : *(char *)pta_array_get(key_al, i);
+					c = (key_al == NULL) ? key_pa.data[i] : *(char *)compost_array_get(key_al, i);
 					if (dblk->equal == NULL) new_dict_block(&dblk->equal, rp, c);
 					dblkp = &dblk->equal;
 					dblk_refc = *dblkp;
-					dblk = pta_get_c_object(dblk_refc);
+					dblk = compost_get_c_object(dblk_refc);
 				}
 			} else if (dblk->key_part > c){
-				void * blk = pta_detach_dependent(dblkp);
-				bool unprotect_blk = pta_protect(blk);
+				void * blk = compost_detach_dependent(dblkp);
+				bool unprotect_blk = compost_protect(blk);
 				new_dict_block(dblkp, rp, c);
 				dblk_refc = *dblkp;
-				dblk = pta_get_c_object(dblk_refc);
-				if (unprotect_blk) pta_unprotect(blk);
-				pta_attach_dependent(&dblk->unequal, blk);
+				dblk = compost_get_c_object(dblk_refc);
+				if (unprotect_blk) compost_unprotect(blk);
+				compost_attach_dependent(&dblk->unequal, blk);
 			} else {
 				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, rp, c);
 				dblkp = &dblk->unequal;
 				dblk_refc = *dblkp;
-				dblk = pta_get_c_object(dblk_refc);
+				dblk = compost_get_c_object(dblk_refc);
 			}
 		}
 	}
 
-	if (unprotect) pta_unprotect(d_refc);
+	if (unprotect) compost_unprotect(d_refc);
 
-	pta_set_reference(value_holder, value);
+	compost_set_reference(value_holder, value);
 	return value;
 }
 
-void * pta_dict_set_al(void * d_refc, void * key_al, void * value){
+void * compost_dict_set_al(void * d_refc, void * key_al, void * value){
 	return dict_set_internal(d_refc, key_al, (array){ 0, NULL }, value);
 }
 
-void * pta_dict_set_pa(void * d_refc, array key_pa, void * value){
+void * compost_dict_set_pa(void * d_refc, array key_pa, void * value){
 	return dict_set_internal(d_refc, NULL, key_pa, value);
 }
 
@@ -139,7 +139,7 @@ void * pta_dict_set_pa(void * d_refc, array key_pa, void * value){
  * Return value: none
  */
 void dict_block_count(void * d_refc, size_t * count){
-	dict_block_t * dblk = pta_get_c_object(d_refc);
+	dict_block_t * dblk = compost_get_c_object(d_refc);
 	if (dblk->value != NULL) (*count)++;
 	if (dblk->equal != NULL) dict_block_count(dblk->equal, count);
 	if (dblk->unequal != NULL) dict_block_count(dblk->unequal, count);
@@ -150,9 +150,9 @@ void dict_block_count(void * d_refc, size_t * count){
  * This function counts the number of elements in a dictionnary.
  * Return value: the number of elements in d
  */
-size_t pta_dict_count(void * d_refc){
+size_t compost_dict_count(void * d_refc){
 	size_t count = 0;
-	dict_t * d = pta_get_c_object(d_refc);
+	dict_t * d = compost_get_c_object(d_refc);
 	if (d->empty_key_v != NULL) count++;
 	if (d->first_block != NULL) dict_block_count(d->first_block, &count);
 	return count;
@@ -167,8 +167,8 @@ size_t pta_dict_count(void * d_refc){
  */
 int get_longest_index_block(dict_block_t * dblk, int l){
 	int l1 = 0, l2 = 0;
-	if (dblk->equal != NULL) l2 = get_longest_index_block(pta_get_c_object(dblk->equal), l + 1);
-	if (dblk->unequal != NULL) l1 = get_longest_index_block(pta_get_c_object(dblk->unequal), l);
+	if (dblk->equal != NULL) l2 = get_longest_index_block(compost_get_c_object(dblk->equal), l + 1);
+	if (dblk->unequal != NULL) l1 = get_longest_index_block(compost_get_c_object(dblk->unequal), l);
 	if (l1 > l || l2 > l) return (l1 > l2 ? l1 : l2);
 	else return dblk->value == NULL ? 0 : l;
 }
@@ -181,7 +181,7 @@ int get_longest_index_block(dict_block_t * dblk, int l){
 int get_longest_index(dict_t * d){
 	int l1 = d->empty_key_v == NULL ? -1 : 0;
 	int l2 = l1;
-	if (d->first_block != NULL) l2 = get_longest_index_block(pta_get_c_object(d->first_block), 1);
+	if (d->first_block != NULL) l2 = get_longest_index_block(compost_get_c_object(d->first_block), 1);
 	return l1 > l2 ? l1 : l2;
 }
 
@@ -206,10 +206,10 @@ bool fill_index(dict_block_t * dblk, array * index, int i){
 		}
 	}
 	if (!result && index->data[i] == dblk->key_part && dblk->equal != NULL){
-		result = fill_index(pta_get_c_object(dblk->equal), index, i + 1);
+		result = fill_index(compost_get_c_object(dblk->equal), index, i + 1);
 	}
 	if (!result && dblk->unequal != NULL){
-		result = fill_index(pta_get_c_object(dblk->unequal), index, i);
+		result = fill_index(compost_get_c_object(dblk->unequal), index, i);
 	}
 	return result;
 }
@@ -228,8 +228,8 @@ bool fill_index(dict_block_t * dblk, array * index, int i){
  * { -1, NULL } as it was initially.
  * Return value: none.
  */
-void pta_dict_get_next_index(void * d_refc, array * index){
-	dict_t * d = pta_get_c_object(d_refc);
+void compost_dict_get_next_index(void * d_refc, array * index){
+	dict_t * d = compost_get_c_object(d_refc);
 	if (index->data == NULL){
 		index->length = get_longest_index(d);
 		if (index->length > 0){
@@ -241,7 +241,7 @@ void pta_dict_get_next_index(void * d_refc, array * index){
 			}
 		} else return;
 	}
-	if (!fill_index(pta_get_c_object(d->first_block), index, 0)){
+	if (!fill_index(compost_get_c_object(d->first_block), index, 0)){
 		free(index->data);
 		index->data = NULL;
 		index->length = -1;

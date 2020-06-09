@@ -1,5 +1,5 @@
 /*
- * LibPTA types manipulations features, C source
+ * Compost types manipulations features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,7 +34,7 @@ obj_info_t get_info(void * obj){
 			info.offsets_zone = GET_OFFSET_ZONE(type);
 			info.offset = (size_t)obj - (size_t)array_obj;
 		} else {
-			type = pta_get_c_object(array_obj->content_type);
+			type = compost_get_c_object(array_obj->content_type);
 			info.offsets_zone = type->offsets;
 			info.offset = obj - ((void *)array_obj + sizeof(array_obj_t));
 			info.offset %= type->object_size + type->offsets;
@@ -47,7 +47,7 @@ obj_info_t get_info(void * obj){
 	return info;
 }
 
-void * pta_get_obj(void * address){
+void * compost_get_obj(void * address){
 	return address - get_info(address).offset;
 }
 
@@ -56,13 +56,13 @@ type_t * strip_variant(type_t * obj){
 	return is_variant ? *(type_t **)((void *)obj + sizeof(array_obj_t)) : obj;
 }
 
-void * pta_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len){
+void * compost_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len){
 	void ** destination = &base_type->variants;
 	while (*destination != NULL){
 		destination = ARRAY_GET(*destination, sizeof(void *), 1);
 	}
 	type_t * szt = &get_root_page(base_type)->szt;
-	array_obj_t * new_var = pta_spot_array_dependent(destination, szt, (len + 1) * 2);
+	array_obj_t * new_var = compost_spot_array_dependent(destination, szt, (len + 1) * 2);
 	constraint_t * slots = ARRAY_GET(new_var, sizeof(void *), 0);
 	slots[0] = (constraint_t){ (size_t)base_type, (size_t)NULL };
 	for (size_t i = 0; i < len; i++){
@@ -71,10 +71,10 @@ void * pta_create_type_variant(type_t * base_type, constraint_t * constraints, s
 	return (void *)new_var;
 }
 
-bool pta_type_mismatch(type_t * type, void * obj){
+bool compost_type_mismatch(type_t * type, void * obj){
 	array_obj_t * variant = (array_obj_t *)type;
 	type_t * base_type = strip_variant(type);
-	bool match = pta_get_obj(base_type) == pta_get_obj(pta_type_of(obj, true));
+	bool match = compost_get_obj(base_type) == compost_get_obj(compost_type_of(obj, true));
 	if (match && base_type != type){
 		constraint_t * constraints = (constraint_t *)(variant + 1);
 		obj_info_t info = get_info(obj);
@@ -95,7 +95,7 @@ bool pta_type_mismatch(type_t * type, void * obj){
  * offset from this base in the field_infos_* arrays of the type.
  * Return value: a type pointer (as a C object, not as a paged object)
  */
-type_t * pta_type_of(void * obj, bool base_type){
+type_t * compost_type_of(void * obj, bool base_type){
 	type_t * field_type;
 	obj_info_t info = get_info(obj);
 
@@ -120,7 +120,7 @@ type_t * pta_type_of(void * obj, bool base_type){
  * C-compatible structure.
  * Return value: a pointer to obj's C structure.
  */
-void * pta_get_c_object(void * obj){
+void * compost_get_c_object(void * obj){
 	if (obj != NULL){
 		obj_info_t info = get_info(obj);
 		if (info.offset < info.offsets_zone) obj += info.offsets_zone - info.offset;
@@ -140,34 +140,34 @@ void * pta_get_c_object(void * obj){
 void zero(void * addr, size_t sz, char value){
 	for (size_t i = 0; i < sz; i++) *(char *)(addr + i) = value;
 }
-void * pta_prepare(void * obj, type_t * type){
-	if (type == NULL) type = pta_type_of(obj, true);
-	void * obj_c = pta_get_c_object(obj);
-	bool unprotect = pta_protect(obj);
+void * compost_prepare(void * obj, type_t * type){
+	if (type == NULL) type = compost_type_of(obj, true);
+	void * obj_c = compost_get_c_object(obj);
+	bool unprotect = compost_protect(obj);
 
 	if (type->flags & TYPE_PRIMITIVE){
 		zero(obj_c, type->object_size, '\x00');
 	} else {
 		array str = { -1, NULL };
 		do {
-			pta_dict_get_next_index(type->dynamic_fields, &str);
+			compost_dict_get_next_index(type->dynamic_fields, &str);
 			if (str.data != NULL){
-				// pta_print_cstr(str);
-				void * field = pta_get_field(obj, str);
+				// compost_print_cstr(str);
+				void * field = compost_get_field(obj, str.length, str.data, true);
 				// printf(" (%p) is being prepared.\n", field);
 				if (field){
-					type_t * field_type = pta_type_of(field, true);
+					type_t * field_type = compost_type_of(field, true);
 					if (field_type != NULL){
 						size_t should_zero = 0;
 
-						uint8_t field_flags = pta_get_flags(field);
+						uint8_t field_flags = compost_get_flags(field);
 						if ((field_flags & FIBF_AUTO_INST)){
 							if ((field_flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
-								void * new_field = pta_spot_dependent(field, field_type);
-								pta_prepare(new_field, field_type);
+								void * new_field = compost_spot_dependent(field, field_type);
+								compost_prepare(new_field, field_type);
 							} else if (field_flags & FIBF_POINTER){
 								should_zero = sizeof(void *); // independent pointer
-							} else pta_prepare(field, field_type); // nested
+							} else compost_prepare(field, field_type); // nested
 						} else should_zero = (field_flags & FIBF_POINTER) ? sizeof(void *) : field_type->object_size; // do not auto instantiate
 
 						zero(field, should_zero, '\x00');
@@ -177,14 +177,14 @@ void * pta_prepare(void * obj, type_t * type){
 		} while (str.data != NULL);
 	}
 
-	if (unprotect) pta_unprotect(obj);
+	if (unprotect) compost_unprotect(obj);
 
 	return obj;
 }
 
 void misbound_error(){
-	printf("\nLibPTA anomaly: misbound instance\n");
-	*(char *)NULL = '\0';
+	printf("\nCompost anomaly: misbound instance\n");
+	raise(SIGABRT);
 }
 
 void * detach_field(void * raw_refc, void * field){
@@ -207,15 +207,15 @@ void * attach_field(void * raw_refc, void * field, void * dependent){
 	return bck;
 }
 
-void * pta_detach_dependent(void * field){
+void * compost_detach_dependent(void * field){
 	void * raw_refc = find_raw_refc(field);
-	uint8_t flags = pta_get_flags(field);
+	uint8_t flags = compost_get_flags(field);
 	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? detach_field(raw_refc, field) : NULL;
 }
 
-void * pta_attach_dependent(void * field, void * dependent_obj){
+void * compost_attach_dependent(void * field, void * dependent_obj){
 	void * raw_refc = find_raw_refc(field);
-	uint8_t flags = pta_get_flags(field);
+	uint8_t flags = compost_get_flags(field);
 	return ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) ? attach_field(raw_refc, field, dependent_obj) : NULL;
 }
 
@@ -231,28 +231,36 @@ void ** get_previous_owner(void * ref_field){
 	} while (fib->field_type != (type_t *)info.offset);
 	return ref_field + prev_owner_i - info.offset;
 }
-
-void pta_set_reference(void * field, void * obj){
-	uint8_t flags = pta_get_flags(field);
+/*
+ * WARNING
+ * protected objects should never be unprotected
+ * after fields are set as referencing to them !
+ */
+void compost_set_reference(void * field, void * obj){
+	uint8_t flags = compost_get_flags(field);
 	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES){
+		compost_clear_reference(field);
 		if (obj != NULL){
-			pta_unprotect(obj);
-			void ** refc = pta_get_final_obj(obj);
-			if (*refc != NULL) *get_previous_owner(field) = *refc;
-			*refc = field;
-		} else pta_clear_reference(field);
+			void ** refc = compost_get_final_obj(obj);
+			if (!is_obj_protected(refc)){
+				if (*refc != NULL) *get_previous_owner(field) = *refc;
+				*refc = field;
+			}
+		}
 	} else misbound_error(); // maybe tmp but i wanna know if it happens
 	*(void **)field = obj;
 }
 
-void pta_clear_reference(void * field){
-	uint8_t flags = pta_get_flags(field);
+void compost_clear_reference(void * field){
+	uint8_t flags = compost_get_flags(field);
 	if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES && *(void **)field != NULL){
-		void ** refc = pta_get_final_obj(*(void **)field);
-		while (*refc != field && *refc != NULL){
-			refc = get_previous_owner(*refc);
+		void ** refc = compost_get_final_obj(*(void **)field);
+		if (!is_obj_protected(refc)){
+			while (*refc != field && *refc != NULL){
+				refc = get_previous_owner(*refc);
+			}
+			*refc = *get_previous_owner(field);
 		}
-		*refc = *get_previous_owner(field);
 	}
 	*(void **)field = NULL;
 }
@@ -281,14 +289,14 @@ void reset_fields(void * c_object, type_t * type){
 		if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(find_raw_refc(c_object), field);
 		else if ((flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
-			*(void **)field = NULL;
 		} else if ((flags & FIBF_REFERENCES) && (*(void **)field != NULL)){
-			pta_clear_reference(field);
+			compost_clear_reference(field);
 		}
+		*(char *)field = '\0';
 	}
 }
 
-/* pta_create_type (object pointer any_paged_obj, 64bit nested_objects, 64bit object_size, 8bit flags)
+/* compost_create_type (object pointer any_paged_obj, 64bit nested_objects, 64bit object_size, 8bit flags)
  * note: the nested_object parameter must perfectly precise
  * note: object_size is the sum of the fields sizes
  * note: any_paged_obj is used to retrieve the context
@@ -297,29 +305,29 @@ void reset_fields(void * c_object, type_t * type){
  * and the fields dictionnaries.
  * Return value: The created type object
  */
-void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags){
+void * compost_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags){
 	size_t offsets = 1 + nested_objects; // add self offset
 	object_size += referencers * sizeof(void *);
 	root_page_t * rp = get_root_page(any_paged_obj);
 
-	void * new_type_refc = pta_spot(&rp->rt);
-	bool unprotect = pta_protect(new_type_refc);
-	type_t * new_type = pta_get_c_object(new_type_refc);
+	void * new_type_refc = compost_spot(&rp->rt);
+	bool unprotect = compost_protect(new_type_refc);
+	type_t * new_type = compost_get_c_object(new_type_refc);
 
-	pta_prepare(new_type_refc, &rp->rt);
+	compost_prepare(new_type_refc, &rp->rt);
 
 	new_type->object_size = object_size;
 	new_type->offsets = offsets;
 	new_type->page_list = NULL;
 	new_type->flags = flags;
 
-	void * dyn_f = pta_spot_dependent(&new_type->dynamic_fields, &rp->dht);
-	void * stat_f = pta_spot_dependent(&new_type->static_fields, &rp->dht);
-	pta_spot_array_dependent(&new_type->dfia, &rp->fiat, offsets);
-	pta_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size);
+	void * dyn_f = compost_spot_dependent(&new_type->dynamic_fields, &rp->dht);
+	void * stat_f = compost_spot_dependent(&new_type->static_fields, &rp->dht);
+	compost_spot_array_dependent(&new_type->dfia, &rp->fiat, offsets);
+	compost_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size);
 
-	*(dict_t *)pta_get_c_object(dyn_f) = (dict_t){ NULL, NULL };
-	*(dict_t *)pta_get_c_object(stat_f) = (dict_t){ NULL, NULL };
+	*(dict_t *)compost_get_c_object(dyn_f) = (dict_t){ NULL, NULL };
+	*(dict_t *)compost_get_c_object(stat_f) = (dict_t){ NULL, NULL };
 
 	new_type->paged_size = compute_paged_size(new_type);
 	new_type->variants = NULL;
@@ -338,7 +346,7 @@ void * pta_create_type(void * any_paged_obj, size_t nested_objects, size_t refer
 		if (i == 0) break;
 	}
 
-	if (unprotect) pta_unprotect(new_type_refc);
+	if (unprotect) compost_unprotect(new_type_refc);
 	return new_type_refc;
 }
 
@@ -357,9 +365,8 @@ void * find_and_fill_fia(type_t * host_type, type_t * field_type, size_t fib_off
 	}
 	// the next line will segfault to prevent further execution.
 	// this is thrown if there is no more room for nested objects in this type spec.
-	*(char *)NULL = '\0';
-	// just to make compilers happy :
-	return NULL;
+	raise(SIGABRT);
+	return NULL; // just to make all compilers happy
 }
 
 void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
@@ -376,11 +383,11 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
 	} while (true);
 	// the next line will segfault to prevent further execution.
 	// this is thrown if there is no more room for nested objects in this type spec.
-	printf("\nLibPTA anomaly: this type doesn\'t have room for referencers.\n");
-	*(char *)NULL = '\0';
+	printf("\nCompost anomaly: this type doesn\'t have room for referencers.\n");
+	raise(SIGABRT);
 }
 
-/* pta_set_dynamic_field (type_t pointer type, type_t pointer field_type, 64bit offset, 8bit flags)
+/* compost_set_dynamic_field (type_t pointer type, type_t pointer field_type, 64bit offset, 8bit flags)
  * note: flags must be a combination of FIBF_BASIC, FIBF_POINTER, FIBF_DEPENDENT, FIBF_ARRAY and FIBF_AUTO_INST.
  * note: offset must be inferior to the type's object_size field.
  *
@@ -390,7 +397,7 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
  * It has a different method for pointers.
  * Return value: the size of the created field (sizeof(void *) for pointers)
  */
-size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array field_name, size_t fib_offset, uint8_t flags){
+size_t compost_set_dynamic_field(type_t * host_type, type_t * field_type, array field_name, size_t fib_offset, uint8_t flags){
 	type_t * stripped_ft = strip_variant(field_type);
 	bool nested = !(stripped_ft->flags & TYPE_PRIMITIVE) && !(flags & FIBF_POINTER);
 
@@ -400,7 +407,7 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 
 	if (nested){
 		field_info = find_and_fill_fia(host_type, field_type, fib_offset);
-		// pta_print_cstr(field_name);
+		// compost_print_cstr(field_name);
 		// printf(" (%li) - nested at %li\n", fib_offset, offset_from_refc);
 		if (stripped_ft->offsets > 1){
 			for (size_t i = 1; i < stripped_ft->offsets; i++){
@@ -424,7 +431,7 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 				*GET_FIB(host_type, fib_offset + i) = *fib;
 			}
 		}
-		if (ref_fields_count) printf("\nLibPTA anomaly: bad field type\n");
+		if (ref_fields_count) printf("\nCompost anomaly: bad field type\n");
 	} else {
 		if (flags & FIBF_POINTER) field_size = sizeof(void *);
 		for (size_t i = 0; i < field_size; i++){
@@ -438,17 +445,17 @@ size_t pta_set_dynamic_field(type_t * host_type, type_t * field_type, array fiel
 			find_and_fill_prev_owner(host_type, fib_offset);
 		}
 	}
-	pta_dict_set_pa(host_type->dynamic_fields, field_name, pta_get_obj(field_info));
+	compost_dict_set_pa(host_type->dynamic_fields, field_name, compost_get_obj(field_info));
 	return field_size;
 }
 
-/* pta_get_flags (object pointer obj)
+/* compost_get_flags (object pointer obj)
  *
  * This function fetches the flags of an object if it is the field
  * of another object.
  * Return value: 8bit FIBF_* combination
  */
-uint8_t pta_get_flags(void * obj){
+uint8_t compost_get_flags(void * obj){
 	obj_info_t info = get_info(obj);
 	uint8_t result;
 
@@ -462,6 +469,7 @@ uint8_t pta_get_flags(void * obj){
 }
 
 void * advance_obj_ptr(void * obj, obj_info_t info, size_t field_offset, bool is_fib){
+	bool ptr = is_fib && GET_FIB(info.page_type, field_offset)->flags & FIBF_POINTER;
 	if (is_fib){
 		field_offset += info.offsets_zone;
 		if (info.offset > 0 && info.offset < info.page_type->offsets){
@@ -469,27 +477,32 @@ void * advance_obj_ptr(void * obj, obj_info_t info, size_t field_offset, bool is
 		}
 	} else field_offset += info.offset;
 
-	return ((void *)pta_get_obj(obj) + field_offset);
+	void ** result = ((void *)compost_get_obj(obj) + field_offset);
+	if (ptr && *result) result = *result;
+	return result;
 }
 
-/* pta_get_field (object pointer obj, string field_name)
+/* compost_get_field (object pointer obj, string field_name)
  * note: deprecated documentation
  *
  * This function gives a field's address given an object address
  * and a field name. It took *three days* to get it to work.
  * Return value: the field's address
  */
-void * pta_get_field(void * obj, array field_name){
-	if (pta_is_pointer(obj)){
-		obj = *(void **)obj;
-		if (!obj) return NULL;
+void * compost_get_field(void * obj, size_t length, char * name, bool dynamic){
+	type_t * field_type = compost_type_of(obj, true);
+	void * result = compost_dict_get_pa(
+		dynamic
+		? field_type->dynamic_fields
+		: field_type->static_fields,
+		(array){ length, name }
+	);
+	if (dynamic && result){
+		bool is_fib = compost_type_of(result, true)->flags & TYPE_FIB;
+		size_t new_offset = compost_array_find(is_fib ? field_type->dfib : field_type->dfia, result);
+
+		result = advance_obj_ptr(obj, get_info(obj), new_offset, is_fib);
 	}
-
-	type_t * field_type = pta_type_of(obj, true);
-	void * field_info = pta_dict_get_pa(field_type->dynamic_fields, field_name);
-	bool is_fib = pta_type_of(field_info, true)->flags & TYPE_FIB;
-	size_t new_offset = pta_array_find(is_fib ? field_type->dfib : field_type->dfia, field_info);
-
-	return advance_obj_ptr(obj, get_info(obj), new_offset, is_fib);
+	return result;
 }
 

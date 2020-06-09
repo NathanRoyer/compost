@@ -10,9 +10,9 @@ clear:
 
 compile:
 	@echo "Compiling project ${PROJECT}"
-	gcc -Wall ${LIB_IGN_WARN} -Iinclude src/paged-types.c -shared -o lib/libpta.so -fPIC -g
+	gcc -Wall ${LIB_IGN_WARN} -Iinclude src/compost.c -shared -o lib/libcompost.so -fPIC -g
 	@echo "Compiling console for ${PROJECT}"
-	gcc -Wall -Iinclude -lreadline ${CONSOLE_SRC} -o console -g -L./lib -Wl,-R./lib/ -lpta
+	gcc -Wall -Iinclude -lreadline ${CONSOLE_SRC} -o console -g -L./lib -Wl,-R./lib/ -lcompost
 
 run: clear compile
 	@./console

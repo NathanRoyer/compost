@@ -1,5 +1,5 @@
 /*
- * LibPTA setup features, C source
+ * Compost setup features, C source
  * Copyright (C) 2020 Nathan ROYER
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,7 +36,7 @@
  *
  */
 
-// typedef PTA_STRUCT root_page {
+// typedef COMPOST_STRUCT root_page {
 // 	page_desc_t header;
 
 // 	refc_t rt_refc; // root type
@@ -65,12 +65,12 @@
 
 // } root_page_t;
 
-typedef PTA_STRUCT {
+typedef COMPOST_STRUCT {
 	uint8_t offset_fib;
 	field_info_b_t fib;
 } fib_o_t;
 
-typedef PTA_STRUCT array_page {
+typedef COMPOST_STRUCT array_page {
 	page_desc_t header;
 
 	// FIA
@@ -175,7 +175,7 @@ typedef PTA_STRUCT array_page {
 
 } array_page_t;
 
-typedef PTA_STRUCT type_dicts {
+typedef COMPOST_STRUCT type_dicts {
 	refc_t df_refc;
 	dict_t df;
 	void * df_pown;
@@ -184,7 +184,7 @@ typedef PTA_STRUCT type_dicts {
 	void * sf_pown;
 } type_dicts_t;
 
-typedef PTA_STRUCT dict_header_page {
+typedef COMPOST_STRUCT dict_header_page {
 	page_desc_t header;
 
 	type_dicts_t rt;
@@ -204,9 +204,9 @@ typedef PTA_STRUCT dict_header_page {
 	type_dicts_t art;
 } dict_header_page_t;
 
-context_t pta_setup(){
-	pta_pages = 3;
-	root_page_t        * rp  = (root_page_t        *)new_random_page(pta_pages).p;
+context_t compost_setup(){
+	compost_pages = 3;
+	root_page_t        * rp  = (root_page_t        *)new_random_page(compost_pages).p;
 	array_page_t       * arp = (array_page_t       *)(PP(rp).s  + page_size);
 	dict_header_page_t * dhp = (dict_header_page_t *)(PP(arp).s + page_size);
 
@@ -424,7 +424,7 @@ context_t pta_setup(){
 		arp->art_fib_ap = (array_obj_t){ &rp->art_refc, &arp->var_fia_ap, &rp->fibt_refc, 24 };
 		
 		arp->art_next[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // next
-		arp->art_cont[0].fib = (field_info_b_t){ &rp->rt,  FIBF_BASIC }; // content_type
+		arp->art_cont[0].fib = (field_info_b_t){ &rp->szt,  FIBF_BASIC }; // content_type
 		arp->art_cap [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // capacity
 		for (int i = 1; i < 8; i++) arp->art_next[i].fib = goback;
 		for (int i = 1; i < 8; i++) arp->art_cont[i].fib = goback;
@@ -503,49 +503,49 @@ context_t pta_setup(){
 #define FIBP(abc) &arp->abc
 		// rt
 		void * df = rp->rt.dynamic_fields;
-		pta_dict_set_pa(df, const_array("dfia"),            FIBP(rt_dfia));
-		pta_dict_set_pa(df, const_array("dfib"),            FIBP(rt_dfib));
-		pta_dict_set_pa(df, const_array("variants"),        FIBP(rt_vars));
-		pta_dict_set_pa(df, const_array("object_size"),     FIBP(rt_objsz));
-		pta_dict_set_pa(df, const_array("offsets"),         FIBP(rt_ofs));
-		pta_dict_set_pa(df, const_array("paged_size"),      FIBP(rt_pgsz));
-		pta_dict_set_pa(df, const_array("dynamic_fields"),  FIBP(rt_dynf));
-		pta_dict_set_pa(df, const_array("static_fields"),   FIBP(rt_statf));
-		pta_dict_set_pa(df, const_array("page_list"),       FIBP(rt_pgl));
-		pta_dict_set_pa(df, const_array("flags"),           FIBP(rt_flags));
+		compost_dict_set_pa(df, const_array("dfia"),            FIBP(rt_dfia));
+		compost_dict_set_pa(df, const_array("dfib"),            FIBP(rt_dfib));
+		compost_dict_set_pa(df, const_array("variants"),        FIBP(rt_vars));
+		compost_dict_set_pa(df, const_array("object_size"),     FIBP(rt_objsz));
+		compost_dict_set_pa(df, const_array("offsets"),         FIBP(rt_ofs));
+		compost_dict_set_pa(df, const_array("paged_size"),      FIBP(rt_pgsz));
+		compost_dict_set_pa(df, const_array("dynamic_fields"),  FIBP(rt_dynf));
+		compost_dict_set_pa(df, const_array("static_fields"),   FIBP(rt_statf));
+		compost_dict_set_pa(df, const_array("page_list"),       FIBP(rt_pgl));
+		compost_dict_set_pa(df, const_array("flags"),           FIBP(rt_flags));
 
 		// fiat
 		df = rp->fiat.dynamic_fields;
-		pta_dict_set_pa(df, const_array("field_type"),      FIBP(fiat_ft));
-		pta_dict_set_pa(df, const_array("data_offset"),     FIBP(fiat_do));
+		compost_dict_set_pa(df, const_array("field_type"),      FIBP(fiat_ft));
+		compost_dict_set_pa(df, const_array("data_offset"),     FIBP(fiat_do));
 
 		// fibt
 		df = rp->fibt.dynamic_fields;
-		pta_dict_set_pa(df, const_array("field_type"),      FIBP(fibt_ft));
-		pta_dict_set_pa(df, const_array("flags"),           FIBP(fibt_flags));
+		compost_dict_set_pa(df, const_array("field_type"),      FIBP(fibt_ft));
+		compost_dict_set_pa(df, const_array("flags"),           FIBP(fibt_flags));
 
 		// dht
 		df = rp->dht.dynamic_fields;
-		pta_dict_set_pa(df, const_array("first_block"),     FIBP(dht_fb));
-		pta_dict_set_pa(df, const_array("empty_key_v"),     FIBP(dht_ekv));
+		compost_dict_set_pa(df, const_array("first_block"),     FIBP(dht_fb));
+		compost_dict_set_pa(df, const_array("empty_key_v"),     FIBP(dht_ekv));
 
 		// dbt
 		df = rp->dbt.dynamic_fields;
-		pta_dict_set_pa(df, const_array("equal"),           FIBP(dbt_eq));
-		pta_dict_set_pa(df, const_array("unequal"),         FIBP(dbt_uneq));
-		pta_dict_set_pa(df, const_array("value"),           FIBP(dbt_val));
-		pta_dict_set_pa(df, const_array("key_part"),        FIBP(dbt_keyp));
+		compost_dict_set_pa(df, const_array("equal"),           FIBP(dbt_eq));
+		compost_dict_set_pa(df, const_array("unequal"),         FIBP(dbt_uneq));
+		compost_dict_set_pa(df, const_array("value"),           FIBP(dbt_val));
+		compost_dict_set_pa(df, const_array("key_part"),        FIBP(dbt_keyp));
 
 		// array
 		df = rp->art.dynamic_fields;
-		pta_dict_set_pa(df, const_array("content_type"),    FIBP(art_cont));
-		pta_dict_set_pa(df, const_array("capacity"),        FIBP(art_cap));
+		compost_dict_set_pa(df, const_array("content_type"),    FIBP(art_cont));
+		compost_dict_set_pa(df, const_array("capacity"),        FIBP(art_cap));
 	}
 
 	return (context_t){ &rp->rt, &rp->szt, &rp->chrt, &rp->dht, &rp->art };
 }
 
-void pta_for_each_type(type_t * root_type, pta_for_each_type_callback cb, void * arg){
+void compost_for_each_type(type_t * root_type, compost_for_each_type_callback cb, void * arg){
 	page_desc_t * desc = root_type->page_list;
 	while (desc){
 		size_t pg_limit = PG_LIMIT(desc, root_type);
