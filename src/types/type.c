@@ -239,7 +239,7 @@ context_t compost_setup(){
 		};
 		rp->rt.paged_size = compute_paged_size((&rp->rt));
 
-		prepare_page_desc((page_desc_t *)rp, &rp->rt, NULL, 1, PAGE_BASIC);
+		prepare_page_desc((page_desc_t *)rp, (vartype_t){ .type = &rp->rt }, NULL, 1, PAGE_BASIC);
 
 		// SIZE TYPE
 		rp->szt_refc = &rp->szt_refc;
@@ -301,7 +301,7 @@ context_t compost_setup(){
 		};
 		rp->dht.paged_size = compute_paged_size((&rp->dht));
 
-		prepare_page_desc((page_desc_t *)dhp, &rp->dht, NULL, 1, PAGE_DEPENDENT);
+		prepare_page_desc((page_desc_t *)dhp, (vartype_t){ .type = &rp->dht }, NULL, 1, PAGE_DEPENDENT);
 
 		// DBT TYPE
 		rp->dbt_refc = &rp->dbt_refc;
@@ -327,7 +327,7 @@ context_t compost_setup(){
 		};
 		rp->art.paged_size = compute_paged_size((&rp->art));
 
-		prepare_page_desc((page_desc_t *)arp, &rp->art, NULL, 1, PAGE_DEPENDENT);
+		prepare_page_desc((page_desc_t *)arp, (vartype_t){ .type = &rp->art }, NULL, 1, PAGE_DEPENDENT);
 	}
 	// FIA ARRAYS
 	if (true){
@@ -346,22 +346,22 @@ context_t compost_setup(){
 	if (true){
 		// refc, size, following free space, next part
 		// field_type, pointer_to_dependent
-		field_info_b_t goback = { GO_BACK, FIBF_BASIC };
+		field_info_b_t goback = { { .type = GO_BACK }, FIBF_BASIC };
 
 		// ROOT TYPE
 		arp->rt_fib_ap = (array_obj_t){ &rp->rt_refc, &arp->szt_fib_ap, &rp->fibt, rt_sz };
 
-		arp->rt_dfia [0].fib = (field_info_b_t){ (type_t *)&arp->var_fia_ap, FIBF_DEPENDENT };
-		arp->rt_dfib [0].fib = (field_info_b_t){ (type_t *)&arp->var_fib_ap, FIBF_DEPENDENT };
-		arp->rt_objsz[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
-		arp->rt_ofs  [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
-		arp->rt_pgsz [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
-		arp->rt_vars [0].fib = (field_info_b_t){ (type_t *)&arp->var_var_ap, FIBF_DEPENDENT };
-		arp->rt_dynf [0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT };
-		arp->rt_statf[0].fib = (field_info_b_t){ &rp->dht, FIBF_DEPENDENT };
-		arp->rt_pgl  [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
-		arp->rt_cdat [0].fib = (field_info_b_t){ NULL, FIBF_BASIC }; // set by the client
-		arp->rt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
+		arp->rt_dfia [0].fib = (field_info_b_t){ { .type = (type_t *)&arp->var_fia_ap }, FIBF_DEPENDENT };
+		arp->rt_dfib [0].fib = (field_info_b_t){ { .type = (type_t *)&arp->var_fib_ap }, FIBF_DEPENDENT };
+		arp->rt_objsz[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC };
+		arp->rt_ofs  [0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC };
+		arp->rt_pgsz [0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC };
+		arp->rt_vars [0].fib = (field_info_b_t){ { .variant = &arp->var_var_ap }, FIBF_DEPENDENT };
+		arp->rt_dynf [0].fib = (field_info_b_t){ { .type = &rp->dht }, FIBF_DEPENDENT };
+		arp->rt_statf[0].fib = (field_info_b_t){ { .type = &rp->dht }, FIBF_DEPENDENT };
+		arp->rt_pgl  [0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC };
+		arp->rt_cdat [0].fib = (field_info_b_t){ { .type = NULL }, FIBF_BASIC }; // set by the client
+		arp->rt_flags[0].fib = (field_info_b_t){ { .type = &rp->chrt }, FIBF_BASIC };
 
 		for (int i = 1; i < PTRSZ; i++) arp->rt_dfia [i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->rt_dfib [i].fib = goback;
@@ -379,48 +379,48 @@ context_t compost_setup(){
 		// SIZE TYPE
 		arp->szt_fib_ap = (array_obj_t){ &rp->szt_refc, &arp->chrt_fib_ap, &rp->fibt_refc, PTRSZ };
 
-		arp->szt_data[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC };
+		arp->szt_data[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC };
 
 		for (int i = 1; i < PTRSZ; i++) arp->szt_data[i].fib = goback;
 
 		// CHAR TYPE
 		arp->chrt_fib_ap = (array_obj_t){ &rp->chrt_refc, &arp->fiat_fib_ap, &rp->fibt_refc, sizeof(uint8_t) };
 
-		arp->chrt_data[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC };
+		arp->chrt_data[0].fib = (field_info_b_t){ { .type = &rp->chrt }, FIBF_BASIC };
 
 		// FIAT TYPE
 		arp->fiat_fib_ap = (array_obj_t){ &rp->fiat_refc, &arp->fibt_fib_ap, &rp->fibt_refc, fiat_sz };
 		
-		arp->fiat_ft[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
-		arp->fiat_do[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // data offset
+		arp->fiat_ft[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC }; // field_type
+		arp->fiat_do[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC }; // data offset
 		for (int i = 1; i < PTRSZ; i++) arp->fiat_ft[i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->fiat_do[i].fib = goback;
 		
 		// FIBT TYPE
 		arp->fibt_fib_ap = (array_obj_t){ &rp->fibt_refc, &arp->dht_fib_ap, &rp->fibt_refc, fibt_sz };
 		
-		arp->fibt_ft   [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // field_type
-		arp->fibt_flags[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC }; // flags
+		arp->fibt_ft   [0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC }; // field_type
+		arp->fibt_flags[0].fib = (field_info_b_t){ { .type = &rp->chrt }, FIBF_BASIC }; // flags
 		for (int i = 1; i < PTRSZ; i++) arp->fibt_ft[i].fib = goback;
 		// fibt_flags is only 1 byte
 		
 		// DICT HEADER TYPE
 		arp->dht_fib_ap = (array_obj_t){ &rp->dht_refc, &arp->dbt_fib_ap, &rp->fibt_refc, dht_sz };
 		
-		arp->dht_fb [0].fib = (field_info_b_t){ &rp->dbt, FIBF_DEPENDENT }; // first_block
-		arp->dht_ekv[0].fib = (field_info_b_t){ &rp->szt, FIBF_REFERENCES }; // empty_key_v
-		arp->dht_pown[0].fib = (field_info_b_t){ (void *)PTRSZ,  FIBF_PREV_OWNER }; // pown
+		arp->dht_fb [0].fib = (field_info_b_t){ { .type = &rp->dbt }, FIBF_DEPENDENT }; // first_block
+		arp->dht_ekv[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_REFERENCES }; // empty_key_v
+		arp->dht_pown[0].fib = (field_info_b_t){ { .obj = (void *)PTRSZ },  FIBF_PREV_OWNER }; // pown
 		for (int i = 1; i < PTRSZ; i++) arp->dht_fb [i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->dht_ekv[i].fib = goback;
 		
 		// DICT BLOCK TYPE
 		arp->dbt_fib_ap = (array_obj_t){ &rp->dbt_refc, &arp->art_fib_ap, &rp->fibt_refc, dbt_sz };
 		
-		arp->dbt_eq  [0].fib = (field_info_b_t){ &rp->dbt,  FIBF_DEPENDENT }; // equal
-		arp->dbt_uneq[0].fib = (field_info_b_t){ &rp->dbt,  FIBF_DEPENDENT }; // unequal
-		arp->dbt_val [0].fib = (field_info_b_t){ &rp->szt,  FIBF_REFERENCES }; // value
-		arp->dbt_keyp[0].fib = (field_info_b_t){ &rp->chrt, FIBF_BASIC }; // key_part
-		arp->dbt_pown[0].fib = (field_info_b_t){ (void *)16,  FIBF_PREV_OWNER }; // pown
+		arp->dbt_eq  [0].fib = (field_info_b_t){ { .type = &rp->dbt },  FIBF_DEPENDENT }; // equal
+		arp->dbt_uneq[0].fib = (field_info_b_t){ { .type = &rp->dbt },  FIBF_DEPENDENT }; // unequal
+		arp->dbt_val [0].fib = (field_info_b_t){ { .type = &rp->szt },  FIBF_REFERENCES }; // value
+		arp->dbt_keyp[0].fib = (field_info_b_t){ { .type = &rp->chrt }, FIBF_BASIC }; // key_part
+		arp->dbt_pown[0].fib = (field_info_b_t){ { .obj = (void *)16 },  FIBF_PREV_OWNER }; // pown
 		for (int i = 1; i < PTRSZ; i++) arp->dbt_eq  [i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->dbt_uneq[i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->dbt_val [i].fib = goback;
@@ -429,9 +429,9 @@ context_t compost_setup(){
 		// ARRAY TYPE
 		arp->art_fib_ap = (array_obj_t){ &rp->art_refc, &arp->var_fia_ap, &rp->fibt_refc, art_sz };
 		
-		arp->art_next[0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // next
-		arp->art_cont[0].fib = (field_info_b_t){ &rp->szt,  FIBF_BASIC }; // content_type
-		arp->art_cap [0].fib = (field_info_b_t){ &rp->szt, FIBF_BASIC }; // capacity
+		arp->art_next[0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC }; // next
+		arp->art_cont[0].fib = (field_info_b_t){ { .type = &rp->szt },  FIBF_BASIC }; // content_type
+		arp->art_cap [0].fib = (field_info_b_t){ { .type = &rp->szt }, FIBF_BASIC }; // capacity
 		for (int i = 1; i < PTRSZ; i++) arp->art_next[i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->art_cont[i].fib = goback;
 		for (int i = 1; i < PTRSZ; i++) arp->art_cap [i].fib = goback;
@@ -452,9 +452,9 @@ context_t compost_setup(){
 		arp->var_fib_next = &arp->var_var_ap;
 		arp->var_var_next = NULL;
 
-		arp->var_fia_ofst = sizeof(size_t);
-		arp->var_fib_ofst = sizeof(size_t);
-		arp->var_var_ofst = sizeof(size_t);
+		arp->var_fia_ofst = PTRSZ;
+		arp->var_fib_ofst = PTRSZ;
+		arp->var_var_ofst = PTRSZ;
 
 		arp->var_fia_value = &rp->fiat_refc;
 		arp->var_fib_value = &rp->fibt_refc;

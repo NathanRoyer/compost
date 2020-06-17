@@ -41,7 +41,7 @@ size_t reg_last_part_bits;
 #define PAGE_DEPENDENT 0b0001
 
 typedef struct page_desc {
-	ptr_t type;
+	ptr_t vartype;
 	ptr_t next;
 	ptr_t flags_and_limit;
 } page_desc_t;
@@ -59,6 +59,6 @@ page_desc_t * get_page_descriptor(void * address);
 
 void set_page_descriptor(ptr_t address, page_desc_t * desc);
 
-void prepare_page_desc(page_desc_t * desc, type_t * type, void * next, size_t contig_len, uint8_t flags);
+void prepare_page_desc(page_desc_t * desc, vartype_t vartype, void * next, size_t contig_len, uint8_t flags);
 
 #endif

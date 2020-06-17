@@ -45,7 +45,7 @@ typedef COMPOST_STRUCT field_info_a {
 } field_info_a_t;
 
 typedef COMPOST_STRUCT field_info_b {
-	type_t * field_type;
+	vartype_t field_vartype;
 	uint8_t flags;
 } field_info_b_t;
 
@@ -58,6 +58,7 @@ typedef struct obj_info {
 	size_t offsets_zone;
 	size_t offset;
 	type_t * page_type;
+	vartype_t page_vartype;
 } obj_info_t;
 
 #define CHSZ (sizeof(uint8_t))
@@ -66,11 +67,15 @@ typedef struct obj_info {
 
 void * compost_get_obj(void * obj);
 
+type_t * strip_variant(vartype_t vartype);
+
 void * compost_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len);
 
-bool compost_type_mismatch(type_t * variant, void * obj);
+bool compost_type_mismatch(vartype_t vartype, void * obj);
 
-type_t * compost_type_of(void * obj, bool base_type);
+vartype_t compost_vartype_of(void * obj);
+
+type_t * compost_type_of(void * obj);
 
 void * compost_get_c_object(void * obj);
 
@@ -96,7 +101,7 @@ void reset_fields(void * c_object, type_t * type);
 
 void * compost_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags);
 
-size_t compost_set_dynamic_field(type_t * type, type_t * field_type, array field_name, size_t offset, uint8_t flags);
+size_t compost_set_dynamic_field(type_t * host_type, vartype_t field_vartype, array field_name, size_t fib_offset, uint8_t flags);
 
 uint8_t compost_get_flags(void * obj);
 

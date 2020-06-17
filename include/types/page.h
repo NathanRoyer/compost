@@ -24,19 +24,11 @@
 #include <unistd.h>
 #include "type.h"
 
-typedef COMPOST_STRUCT array_obj array_obj_t;
 typedef COMPOST_STRUCT root_page root_page_t;
 
 #include "refc.h"
 #include "field.h"
 #include "descriptor.h"
-
-typedef COMPOST_STRUCT array_obj {
-	void * refc;
-	array_obj_t * next;
-	void * content_type;
-	size_t capacity;
-} array_obj_t;
 
 size_t page_size;
 size_t page_rel_mask;
@@ -46,15 +38,15 @@ size_t compost_pages;
 #define ARRAY_GET(obj, item_size, i) ((void *)((array_obj_t *)(obj) + 1) + (item_size) * (i))
 
 #define PG_REFC2(desc) ((void *)(PP(desc).s + sizeof(page_desc_t)))
-#define PG_TYPE2(desc) ((type_t *)((desc)->type.p))
+#define PG_TYPE2(desc) ((vartype_t){ .obj = (desc)->vartype.p })
 #define PG_NEXT(desc)  ((page_desc_t *)((desc)->next.p))
 #define PG_FLAGS(desc) ((desc)->flags_and_limit.s & page_rel_mask)
 #define PG_RAW_LIMIT(desc) ((desc)->flags_and_limit.s & page_mask)
 #define PG_LIMIT(desc, type) (PG_RAW_LIMIT(desc) - (type)->paged_size + 1)
 
-void * compost_spot(type_t * type);
+void * compost_spot(vartype_t vartype);
 
-void * compost_spot_dependent(void * destination, type_t * type);
+void * compost_spot_dependent(void * destination, vartype_t vartype);
 
 void * compost_spot_array(type_t * type, size_t size);
 

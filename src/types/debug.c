@@ -76,7 +76,7 @@ void load_fields(uint8_t flags){
 void compost_print_fields(void * obj, type_t * type){
 	void * refc = obj ? compost_get_obj(obj) : NULL;
 	if (!obj) obj = (void *)-1;
-	if (type == NULL) type = compost_type_of(refc, true);
+	if (type == NULL) type = compost_type_of(refc);
 	printf("\n+- Field Info A -------------------+\n| OFST |        TYPE        | DEST |\n");
 	printf("+------+--------------------+------+\n");
 	for (size_t i = 0; i < type->offsets; i++){
@@ -99,8 +99,8 @@ void compost_print_fields(void * obj, type_t * type){
 		field_info_b_t * fib = GET_FIB(type, i);
 		if (refc + i == obj) print_color(0, false);
 		printf("| %04li | ", i);
-		if (fib->field_type == GO_BACK) printf("↑                ↑");
-		else printf("%018p", fib->field_type);
+		if (fib->field_vartype.type == GO_BACK) printf("↑                ↑");
+		else printf("%018p", fib->field_vartype.obj);
 		load_fields(fib->flags);
 		printf(" | %s |\033[m\n", field_flags_str);
 	}
@@ -156,7 +156,7 @@ size_t print_value(void * object, size_t size){
 void show_fields(void * obj, size_t recursion){
 	// sleep(1);
 	if (obj == NULL) return (void) printf(" (NULL)\n");
-	type_t * type = compost_type_of(obj, true);
+	type_t * type = compost_type_of(obj);
 	if (type == NULL) return (void) printf(" (Unknown type)\n");
 	if (type->flags & TYPE_PRIMITIVE){
 		printf(" = ");
@@ -170,7 +170,7 @@ void show_fields(void * obj, size_t recursion){
 	} else {
 		if (compost_is_pointer(obj)){
 			obj = *(void **)obj;
-			type = compost_type_of(obj, true);
+			type = compost_type_of(obj);
 		}
 		if (recursion) putchar('\n');
 		array str = { -1, NULL };
@@ -230,8 +230,9 @@ void compost_show_pages(void * any_paged_address){
 			printf("Pages of a type with object_size = %li:\n", type->object_size);
 			page_desc_t * page = type->page_list;
 			while (page){
-				size_t instances = page_occupied_slots(PG_LIMIT(page, PG_TYPE2(page)), PG_FLAGS(page), PG_REFC2(page), type);
-				if (PG_TYPE2(page) != type) printf("Error with the following page type:\n");
+				type_t * pgtype = strip_variant(PG_TYPE2(page));
+				size_t instances = page_occupied_slots(PG_LIMIT(page, pgtype), PG_FLAGS(page), PG_REFC2(page), type);
+				if (pgtype != type) printf("Error with the following page type:\n");
 				printf("%p :\n\tflags: %hhx\n\tinstances: %lu\n", page, PG_FLAGS(page), instances);
 				page = PG_NEXT(page);
 			}

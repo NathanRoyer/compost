@@ -21,14 +21,15 @@
 
 void ** find_raw_refc(void * address){
 	page_desc_t * desc = get_page_descriptor(address);
-	if (PG_TYPE2(desc)->flags & TYPE_ARRAY){
+	type_t * type = strip_variant(PG_TYPE2(desc));
+	if (type->flags & TYPE_ARRAY){
 		array_obj_t * array_obj = PG_REFC2(desc), * next_ap;
 		while ((next_ap = array_obj->next) != NULL){
 			if (address < (void *)next_ap) break;
 			else array_obj = next_ap;
 		}
 		return &array_obj->refc;
-	} else return address - ((PP(address).s - PP(desc + 1).s) % PG_TYPE2(desc)->paged_size);
+	} else return address - ((PP(address).s - PP(desc + 1).s) % type->paged_size);
 }
 
 void * compost_get_final_obj(void * address){

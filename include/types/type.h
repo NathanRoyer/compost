@@ -74,6 +74,20 @@ typedef COMPOST_STRUCT type {
 	uint8_t flags;          // 
 } type_t;
 
+typedef COMPOST_STRUCT array_obj array_obj_t;
+typedef COMPOST_STRUCT array_obj {
+	void * refc;
+	array_obj_t * next;
+	void * content_type;
+	size_t capacity;
+} array_obj_t;
+
+typedef union {
+	type_t * type;
+	array_obj_t * variant;
+	void * obj;
+} vartype_t;
+
 uint8_t fake_type_go_back;
 #define GO_BACK   ((type_t *)&fake_type_go_back)
 

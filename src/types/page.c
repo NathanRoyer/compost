@@ -33,7 +33,8 @@ void get_system_paging_config(){
 	compute_regs_config();
 }
 
-void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
+void * spot_internal(vartype_t vartype, uint8_t flags, size_t array_bytes){
+	type_t * type = strip_variant(vartype);
 	page_desc_t * desc = type->page_list;
 	bool array_f = type->flags & TYPE_ARRAY;
 	while (true){
@@ -46,7 +47,7 @@ void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 
 			ptr_t page = new_random_page(contig_pages);
 			desc = (page_desc_t *)page.p;
-			prepare_page_desc(desc, type, type->page_list, contig_pages, flags);
+			prepare_page_desc(desc, vartype, type->page_list, contig_pages, flags);
 			size_t pg_limit = PG_LIMIT(desc, type);
 			for (ptr_t i = page; i.s < pg_limit; i.s += page_size){
 				set_page_descriptor(i, desc);
@@ -80,15 +81,15 @@ void * spot_internal(type_t * type, uint8_t flags, size_t array_bytes){
 	}
 }
 
-void * compost_spot(type_t * type){
-	return spot_internal(type, PAGE_BASIC, 0);
+void * compost_spot(vartype_t vartype){
+	return spot_internal(vartype, PAGE_BASIC, 0);
 }
 
-void * compost_spot_dependent(void * destination, type_t * type){
+void * compost_spot_dependent(void * destination, vartype_t vartype){
 	void ** new_spot;
 	uint8_t flags = compost_get_flags(destination);
 	if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
-		new_spot = spot_internal(type, PAGE_DEPENDENT, 0);
+		new_spot = spot_internal(vartype, PAGE_DEPENDENT, 0);
 		attach_field(compost_get_obj(destination), destination, new_spot);
 	} else new_spot = NULL;
 	return new_spot;
@@ -129,7 +130,7 @@ void shrink_array(page_desc_t * desc, array_obj_t * array_obj, size_t array_byte
 
 void * compost_spot_array_internal(type_t * type, size_t capacity, uint8_t flags){
 	size_t array_bytes = capacity * (type->object_size + type->offsets);
-	array_obj_t * array_obj = spot_internal(&get_root_page(type)->art, flags, array_bytes);
+	array_obj_t * array_obj = spot_internal((vartype_t){ .type = &get_root_page(type)->art }, flags, array_bytes);
 	array_obj->content_type = compost_get_obj(type);
 	array_obj->capacity = capacity;
 	return (void *)array_obj;
@@ -233,6 +234,6 @@ page_desc_t * update_page_list(page_desc_t * desc, type_t * type, bool should_de
 
 root_page_t * get_root_page(void * obj){
 	page_desc_t * desc = get_page_descriptor(obj); // getting any type
-	desc = get_page_descriptor(PG_TYPE2(desc)); // getting the root type
-	return (root_page_t *)((size_t)PG_TYPE2(desc) & page_mask); // getting the root page
+	desc = get_page_descriptor(PG_TYPE2(desc).obj); // getting the root type
+	return (root_page_t *)((size_t)(PG_TYPE2(desc).obj) & page_mask); // getting the root page
 }

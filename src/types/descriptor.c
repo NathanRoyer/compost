@@ -154,8 +154,8 @@ void set_page_descriptor(ptr_t address, page_desc_t * desc){
 	reg->s = (size_t)desc;
 }
 
-void prepare_page_desc(page_desc_t * desc, type_t * type, void * next, size_t contig_len, uint8_t flags){
-	desc->type = PP(type);
+void prepare_page_desc(page_desc_t * desc, vartype_t vartype, void * next, size_t contig_len, uint8_t flags){
+	desc->vartype = PP(vartype.obj);
 	desc->next = PP(next);
 	desc->flags_and_limit = PP(desc);
 	desc->flags_and_limit.s += page_size * contig_len;

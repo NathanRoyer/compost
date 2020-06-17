@@ -21,7 +21,8 @@
 
 obj_info_t get_info(void * obj){
 	page_desc_t * desc = get_page_descriptor(obj);
-	type_t * type = PG_TYPE2(desc);
+	vartype_t vartype = PG_TYPE2(desc);
+	type_t * type = strip_variant(vartype);
 	obj_info_t info;
 	if (type->flags & TYPE_ARRAY){
 		array_obj_t * array_obj = PG_REFC2(desc), * next_ap;
@@ -35,6 +36,7 @@ obj_info_t get_info(void * obj){
 			info.offset = (size_t)obj - (size_t)array_obj;
 		} else {
 			type = compost_get_c_object(array_obj->content_type);
+			vartype.type = type;
 			info.offsets_zone = type->offsets;
 			info.offset = obj - ((void *)array_obj + sizeof(array_obj_t));
 			info.offset %= type->object_size + type->offsets;
@@ -44,6 +46,7 @@ obj_info_t get_info(void * obj){
 		info.offsets_zone = GET_OFFSET_ZONE(type);
 	}
 	info.page_type = type;
+	info.page_vartype = vartype;
 	return info;
 }
 
@@ -51,9 +54,10 @@ void * compost_get_obj(void * address){
 	return address - get_info(address).offset;
 }
 
-type_t * strip_variant(type_t * obj){
-	bool is_variant = PG_TYPE2(get_page_descriptor(obj))->flags & TYPE_ARRAY;
-	return is_variant ? *(type_t **)((void *)obj + sizeof(array_obj_t)) : obj;
+type_t * strip_variant(vartype_t vartype){
+	// is this assumption dangerous ?
+	bool is_variant = PG_TYPE2(get_page_descriptor(vartype.obj)).type->flags & TYPE_ARRAY;
+	return is_variant ? *(type_t **)(vartype.variant + 1) : vartype.type;
 }
 
 void * compost_create_type_variant(type_t * base_type, constraint_t * constraints, size_t len){
@@ -71,14 +75,13 @@ void * compost_create_type_variant(type_t * base_type, constraint_t * constraint
 	return (void *)new_var;
 }
 
-bool compost_type_mismatch(type_t * type, void * obj){
-	array_obj_t * variant = (array_obj_t *)type;
-	type_t * base_type = strip_variant(type);
-	bool match = compost_get_obj(base_type) == compost_get_obj(compost_type_of(obj, true));
-	if (match && base_type != type){
-		constraint_t * constraints = (constraint_t *)(variant + 1);
+bool compost_type_mismatch(vartype_t vartype, void * obj){
+	type_t * base_type = strip_variant(vartype);
+	bool match = compost_get_obj(base_type) == compost_get_obj(compost_type_of(obj));
+	if (match && base_type != vartype.type){
+		constraint_t * constraints = (constraint_t *)(vartype.variant + 1);
 		obj_info_t info = get_info(obj);
-		for (size_t i = 1, j = 2; j < variant->capacity && match; j += 2){
+		for (size_t i = 1, j = 2; j < vartype.variant->capacity && match; j += 2){
 			size_t * location = (size_t *)advance_obj_ptr(obj, info, constraints[i].field_offset, true);
 			match = constraints[i].value == *location;
 		}
@@ -86,32 +89,27 @@ bool compost_type_mismatch(type_t * type, void * obj){
 	return !match;
 }
 
-/* type_of (pointer obj)
- * note; outdated documentation
- *
- * This function tells the type of a paged object.
- * How it works:
- * It first finds the base address of the object, then it searches the
- * offset from this base in the field_infos_* arrays of the type.
- * Return value: a type pointer (as a C object, not as a paged object)
- */
-type_t * compost_type_of(void * obj, bool base_type){
-	type_t * field_type;
+vartype_t compost_vartype_of(void * obj){
+	vartype_t vartype;
 	obj_info_t info = get_info(obj);
 
-	if (info.offset == 0) field_type = info.page_type;
+	if (info.offset == 0) vartype = info.page_vartype;
 	else if (info.offset < info.offsets_zone){
-		do field_type = GET_FIA(info.page_type, info.offset--)->field_type;
-		while (field_type == GO_BACK);
+		do vartype.type = GET_FIA(info.page_type, info.offset--)->field_type;
+		while (vartype.type == GO_BACK);
 	} else {
 		info.offset -= info.offsets_zone;
 		field_info_b_t * fib;
 		do {
 			fib = GET_FIB(info.page_type, info.offset--);
-			field_type = fib->field_type;
-		} while (field_type == GO_BACK);
+			vartype = fib->field_vartype;
+		} while (vartype.type == GO_BACK);
 	}
-	return base_type ? strip_variant(field_type) : field_type;
+	return vartype;
+}
+
+type_t * compost_type_of(void * obj){
+	return strip_variant(compost_vartype_of(obj));
 }
 
 /* get_c_object (pointer obj)
@@ -141,7 +139,7 @@ void zero(void * addr, size_t sz, char value){
 	for (size_t i = 0; i < sz; i++) *(char *)(addr + i) = value;
 }
 void * compost_prepare(void * obj, type_t * type){
-	if (type == NULL) type = compost_type_of(obj, true);
+	if (type == NULL) type = compost_type_of(obj);
 	void * obj_c = compost_get_c_object(obj);
 	bool unprotect = compost_protect(obj);
 
@@ -156,14 +154,15 @@ void * compost_prepare(void * obj, type_t * type){
 				void * field = compost_get_field(obj, str.length, str.data, true);
 				// printf(" (%p) is being prepared.\n", field);
 				if (field){
-					type_t * field_type = compost_type_of(field, true);
-					if (field_type != NULL){
+					vartype_t field_vartype = compost_vartype_of(field);
+					type_t * field_type = strip_variant(field_vartype);
+					if (field_vartype.type != NULL){
 						size_t should_zero = 0;
 
 						uint8_t field_flags = compost_get_flags(field);
 						if ((field_flags & FIBF_AUTO_INST)){
 							if ((field_flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
-								void * new_field = compost_spot_dependent(field, field_type);
+								void * new_field = compost_spot_dependent(field, field_vartype);
 								compost_prepare(new_field, field_type);
 							} else if (field_flags & FIBF_POINTER){
 								should_zero = sizeof(void *); // independent pointer
@@ -228,7 +227,7 @@ void ** get_previous_owner(void * ref_field){
 		prev_owner_i -= sizeof(void *);
 		fib = GET_FIB(info.page_type, prev_owner_i);
 		if ((fib->flags & FIBF_PREV_OWNER) == 0) return NULL;
-	} while (fib->field_type != (type_t *)info.offset);
+	} while (fib->field_vartype.obj != (void *)info.offset);
 	return ref_field + prev_owner_i - info.offset;
 }
 /*
@@ -286,8 +285,9 @@ void reset_fields(void * c_object, type_t * type){
 	for (size_t i = 0; i < type->object_size; i++){
 		uint8_t flags = GET_FIB(type, i)->flags;
 		void * field = c_object + i;
-		if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT) detach_field(find_raw_refc(c_object), field);
-		else if ((flags & FIBF_MALLOC) && (*(void **)field != NULL)){
+		if ((flags & FIBF_DEPENDENT) == FIBF_DEPENDENT){
+			detach_field(find_raw_refc(c_object), field);
+		} else if ((flags & FIBF_MALLOC) && (*(void **)field != NULL)){
 			free(*(void **)field);
 		} else if ((flags & FIBF_REFERENCES) && (*(void **)field != NULL)){
 			compost_clear_reference(field);
@@ -307,10 +307,10 @@ void reset_fields(void * c_object, type_t * type){
  */
 void * compost_create_type(void * any_paged_obj, size_t nested_objects, size_t referencers, size_t object_size, uint8_t flags){
 	size_t offsets = 1 + nested_objects; // add self offset
-	object_size += referencers * sizeof(void *);
+	object_size += referencers * PTRSZ;
 	root_page_t * rp = get_root_page(any_paged_obj);
 
-	void * new_type_refc = compost_spot(&rp->rt);
+	void * new_type_refc = compost_spot((vartype_t){ &rp->rt });
 	bool unprotect = compost_protect(new_type_refc);
 	type_t * new_type = compost_get_c_object(new_type_refc);
 
@@ -321,8 +321,8 @@ void * compost_create_type(void * any_paged_obj, size_t nested_objects, size_t r
 	new_type->page_list = NULL;
 	new_type->flags = flags;
 
-	void * dyn_f = compost_spot_dependent(&new_type->dynamic_fields, &rp->dht);
-	void * stat_f = compost_spot_dependent(&new_type->static_fields, &rp->dht);
+	void * dyn_f = compost_spot_dependent(&new_type->dynamic_fields, (vartype_t){ &rp->dht });
+	void * stat_f = compost_spot_dependent(&new_type->static_fields, (vartype_t){ &rp->dht });
 	compost_spot_array_dependent(&new_type->dfia, &rp->fiat, offsets);
 	compost_spot_array_dependent(&new_type->dfib, &rp->fibt, object_size);
 
@@ -339,9 +339,9 @@ void * compost_create_type(void * any_paged_obj, size_t nested_objects, size_t r
 	for (size_t i = object_size - 1;; i--){
 		field_info_b_t * fib = GET_FIB(new_type, i);
 		if (((object_size - i) % sizeof(void *)) == 0){
-			*fib = (field_info_b_t){ (void *)i, FIBF_PREV_OWNER };
+			*fib = (field_info_b_t){ { .obj = (void *)i }, FIBF_PREV_OWNER };
 		} else {
-			*fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
+			*fib = (field_info_b_t){ { .type = GO_BACK }, FIBF_BASIC };
 		}
 		if (i == 0) break;
 	}
@@ -375,14 +375,12 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
 		prev_owner_i -= sizeof(void *);
 		field_info_b_t * fib = GET_FIB(host_type, prev_owner_i);
 		if (fib->flags & FIBF_PREV_OWNER){
-			if (fib->field_type == (void *)prev_owner_i){
-				fib->field_type = (void *)fib_offset;
+			if (fib->field_vartype.obj == (void *)prev_owner_i){
+				fib->field_vartype.obj = (void *)fib_offset;
 				return;
 			}
 		} else break;
 	} while (true);
-	// the next line will segfault to prevent further execution.
-	// this is thrown if there is no more room for nested objects in this type spec.
 	printf("\nCompost anomaly: this type doesn\'t have room for referencers.\n");
 	raise(SIGABRT);
 }
@@ -397,8 +395,8 @@ void find_and_fill_prev_owner(type_t * host_type, size_t fib_offset){
  * It has a different method for pointers.
  * Return value: the size of the created field (sizeof(void *) for pointers)
  */
-size_t compost_set_dynamic_field(type_t * host_type, type_t * field_type, array field_name, size_t fib_offset, uint8_t flags){
-	type_t * stripped_ft = strip_variant(field_type);
+size_t compost_set_dynamic_field(type_t * host_type, vartype_t field_vartype, array field_name, size_t fib_offset, uint8_t flags){
+	type_t * stripped_ft = strip_variant(field_vartype);
 	bool nested = !(stripped_ft->flags & TYPE_PRIMITIVE) && !(flags & FIBF_POINTER);
 
 	size_t field_size = stripped_ft->object_size;
@@ -406,7 +404,7 @@ size_t compost_set_dynamic_field(type_t * host_type, type_t * field_type, array 
 	field_info_b_t * fib;
 
 	if (nested){
-		field_info = find_and_fill_fia(host_type, field_type, fib_offset);
+		field_info = find_and_fill_fia(host_type, stripped_ft, fib_offset);
 		// compost_print_cstr(field_name);
 		// printf(" (%li) - nested at %li\n", fib_offset, offset_from_refc);
 		if (stripped_ft->offsets > 1){
@@ -437,9 +435,9 @@ size_t compost_set_dynamic_field(type_t * host_type, type_t * field_type, array 
 		for (size_t i = 0; i < field_size; i++){
 			fib = GET_FIB(host_type, fib_offset + i);
 			if (i == 0){
-				*fib = (field_info_b_t){ field_type, flags };
+				*fib = (field_info_b_t){ field_vartype, flags };
 				field_info = fib;
-			} else *fib = (field_info_b_t){ GO_BACK, FIBF_BASIC };
+			} else *fib = (field_info_b_t){ { GO_BACK }, FIBF_BASIC };
 		}
 		if ((flags & FIBF_REFERENCES) == FIBF_REFERENCES){
 			find_and_fill_prev_owner(host_type, fib_offset);
@@ -490,7 +488,7 @@ void * advance_obj_ptr(void * obj, obj_info_t info, size_t field_offset, bool is
  * Return value: the field's address
  */
 void * compost_get_field(void * obj, size_t length, char * name, bool dynamic){
-	type_t * field_type = compost_type_of(obj, true);
+	type_t * field_type = compost_type_of(obj);
 	void * result = compost_dict_get_pa(
 		dynamic
 		? field_type->dynamic_fields
@@ -498,7 +496,7 @@ void * compost_get_field(void * obj, size_t length, char * name, bool dynamic){
 		(array){ length, name }
 	);
 	if (dynamic && result){
-		bool is_fib = compost_type_of(result, true)->flags & TYPE_FIB;
+		bool is_fib = compost_type_of(result)->flags & TYPE_FIB;
 		size_t new_offset = compost_array_find(is_fib ? field_type->dfib : field_type->dfia, result);
 
 		result = advance_obj_ptr(obj, get_info(obj), new_offset, is_fib);

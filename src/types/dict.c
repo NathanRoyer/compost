@@ -32,8 +32,8 @@
  * this function is a sort of constructor for new blocks.
  * Return value: freshly setup dict_block_t
  */
-void new_dict_block(void * field, root_page_t * rp, int8_t key_part){
-	*(dict_block_t *)compost_get_c_object(compost_spot_dependent(field, &rp->dbt)) = (dict_block_t){ NULL, NULL, NULL, key_part };
+void new_dict_block(void * field, vartype_t vartype, int8_t key_part){
+	*(dict_block_t *)compost_get_c_object(compost_spot_dependent(field, vartype)) = (dict_block_t){ NULL, NULL, NULL, key_part };
 }
 
 /* dict_get(dictionnary d, string key)
@@ -75,7 +75,7 @@ void * compost_dict_get_pa(void * d_refc, array key){
  */
 void * dict_set_internal(void * d_refc, array_obj_t * key_al, array key_pa, void * value){
 	bool unprotect = compost_protect(d_refc);
-	root_page_t * rp = get_root_page(d_refc);
+	vartype_t dbt = { .type = &get_root_page(d_refc)->dbt };
 
 	dict_t * d = compost_get_c_object(d_refc);
 	size_t key_length = (key_al == NULL) ? key_pa.length : key_al->capacity;
@@ -84,7 +84,7 @@ void * dict_set_internal(void * d_refc, array_obj_t * key_al, array key_pa, void
 	if (key_length == 0) value_holder = &d->empty_key_v;
 	else {
 		c = (key_al == NULL) ? key_pa.data[0] : *(char *)compost_array_get(key_al, 0);
-		if (d->first_block == NULL) new_dict_block(&d->first_block, rp, c);
+		if (d->first_block == NULL) new_dict_block(&d->first_block, dbt, c);
 		void ** dblkp = &d->first_block;
 		void * dblk_refc = *dblkp;
 		dict_block_t * dblk = compost_get_c_object(dblk_refc);
@@ -96,7 +96,7 @@ void * dict_set_internal(void * d_refc, array_obj_t * key_al, array key_pa, void
 				else {
 					// i was just incremented
 					c = (key_al == NULL) ? key_pa.data[i] : *(char *)compost_array_get(key_al, i);
-					if (dblk->equal == NULL) new_dict_block(&dblk->equal, rp, c);
+					if (dblk->equal == NULL) new_dict_block(&dblk->equal, dbt, c);
 					dblkp = &dblk->equal;
 					dblk_refc = *dblkp;
 					dblk = compost_get_c_object(dblk_refc);
@@ -104,13 +104,13 @@ void * dict_set_internal(void * d_refc, array_obj_t * key_al, array key_pa, void
 			} else if (dblk->key_part > c){
 				void * blk = compost_detach_dependent(dblkp);
 				bool unprotect_blk = compost_protect(blk);
-				new_dict_block(dblkp, rp, c);
+				new_dict_block(dblkp, dbt, c);
 				dblk_refc = *dblkp;
 				dblk = compost_get_c_object(dblk_refc);
 				if (unprotect_blk) compost_unprotect(blk);
 				compost_attach_dependent(&dblk->unequal, blk);
 			} else {
-				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, rp, c);
+				if (dblk->unequal == NULL) new_dict_block(&dblk->unequal, dbt, c);
 				dblkp = &dblk->unequal;
 				dblk_refc = *dblkp;
 				dblk = compost_get_c_object(dblk_refc);

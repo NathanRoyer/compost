@@ -89,7 +89,7 @@ int main(int argc, char *argv[]){
 				if (type){
 					if (compost_type_of(type, true) == ctx.rt){
 						compost_type_t * var_t = compost_get_c_object(type);
-						void * new_var = compost_prepare(compost_spot(var_t), var_t);
+						void * new_var = compost_spot(var_t);
 						printf("spotted\n");
 						compost_dict_set_pa(variables, instance_name, new_var);
 						compost_protect(new_var);
